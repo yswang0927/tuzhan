@@ -1,0 +1,39 @@
+
+.map-app-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+.map-app-header {
+    display: flex;
+    align-items: center;
+    height: 2.5rem;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.15);
+}
+.map-app-header-icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    height: 100%;
+    background-color: rgb(78, 140, 238, 0.1);
+    border-right: 1px solid rgba(0, 0, 0, 0.15);
+}
+.map-app-header-icon svg {
+    width: 1.5rem;
+    height: 1.5rem;
+}
+.map-app-header-title {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    flex: 1;
+    padding: 0 1rem;
+    font-size: 1rem;
+    font-weight: 700;
+}
+.map-app-main {
+    flex: 1;
+}
+

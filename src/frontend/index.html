@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GraphMap</title>
+  <style>
+    html, body {margin:0; padding: 0; height:100%; height: 100vh;}
+    *, *:before, *:after, *:after {box-sizing: border-box;}
+  </style>
+
+  <script>
+    (function() {
+      try {
+        const saved = localStorage.getItem('tuzhan_theme') || 'light';
+        let target = saved;
+        if (saved === 'system') {
+          target = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+        }
+        document.documentElement.setAttribute('data-theme', target);
+        if (target === 'dark') {
+          document.documentElement.classList.add('dark', 'bp6-dark');
+        }
+      } catch (e) {}
+    })();
+  </script>
+
+  <!-- 高德地图 -->
+  <script type="text/javascript">
+    window._AMapSecurityConfig = {
+      securityJsCode: "5292d829b1cf65c1c0b654a1ff9ea906"
+    };
+  </script>
+  <script src="https://webapi.amap.com/loader.js"></script>
+
+</head>
+
+<body>
+  <div id="root" style="position:absolute;top:0;left:0;width:100%;height:100%;"></div>
+  <script type="module" src="./main.tsx"></script>
+</body>
+
+</html>
