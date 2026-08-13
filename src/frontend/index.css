@@ -1,3 +1,29 @@
+:root {
+  --base-font-size: 16px;
+}
+
+/*
+  条件1：逻辑宽度超大 (>= 2500px)
+  条件2：宽高比必须小于等于 2.1 (即 21:10 左右)
+  只有同时满足，才是“真正的全尺寸 4K/8K 大屏”；如果是带鱼屏（例如 21:9 = 2.33），会被自动排除！
+*/
+@media screen and (min-width: 2500px) and (max-aspect-ratio: 21/10) {
+  :root {
+    --base-font-size: 22px;
+  }
+}
+
+@media screen and (min-width: 3800px) and (max-aspect-ratio: 21/10) {
+  :root {
+    --base-font-size: 28px;
+  }
+}
+
+html {
+  font-size: var(--base-font-size);
+}
+
+
 :root,
 [data-theme="light"] {
   /* ---------- 1. 背景色 Background ---------- */
@@ -226,7 +252,6 @@
 html {
   min-width: 320px;
   min-height: 100%;
-  font-size: 16px;
 }
 
 body {
@@ -234,6 +259,7 @@ body {
   min-height: 100vh;
   margin: 0;
   padding: 0;
+  font-size: 0.875rem;
 }
 
 a {

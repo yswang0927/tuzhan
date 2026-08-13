@@ -7,7 +7,7 @@
 .map-app-header {
     display: flex;
     align-items: center;
-    height: 2.5rem;
+    height: 3rem;
     border-bottom: 1px solid rgba(0, 0, 0, 0.15);
 }
 .map-app-header-icon {
@@ -21,8 +21,8 @@
     border-right: 1px solid rgba(0, 0, 0, 0.15);
 }
 .map-app-header-icon svg {
-    width: 1.5rem;
-    height: 1.5rem;
+    width: 1.75rem;
+    height: 1.75rem;
 }
 .map-app-header-title {
     height: 100%;
@@ -37,3 +37,9 @@
     flex: 1;
 }
 
+.map-app-search-panel .bp6-card {
+    --_blur: 1rem;
+    -webkit-backdrop-filter: blur(var(--_blur));
+    backdrop-filter: blur(var(--_blur));
+    background-color: #ffffff80 !important;
+}

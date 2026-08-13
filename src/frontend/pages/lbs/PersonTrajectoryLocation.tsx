@@ -149,7 +149,7 @@ export default function PersonTrajectoryLocation() {
                 <div className="absolute inset-0">
                     <GeoMap />
 
-                    <div className="absolute" style={{left: "1rem", top: "1rem", width: "260px", zIndex: 10}}>
+                    <div className="absolute map-app-search-panel" style={{left: "1rem", top: "1rem", width: "260px", zIndex: 10}}>
                         <Card elevation={Elevation.TWO}>
                             <h3 style={{marginTop:0}}>{t('人员轨迹查询')}</h3>
                             <form>
@@ -167,7 +167,7 @@ export default function PersonTrajectoryLocation() {
                             </FormGroup>
 
                             <div>
-                                <Button icon="search" text={t('查询')} intent="primary" fill={true}/>
+                                <Button text={t('查询')} intent="primary" fill={true}/>
                             </div>
                             </form>
                         </Card>

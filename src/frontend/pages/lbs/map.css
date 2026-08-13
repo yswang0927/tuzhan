@@ -1,0 +1,94 @@
+/* 信息面板 */
+.info-panel {
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    z-index: 1000;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+    padding: 16px 20px;
+    min-width: 280px;
+    backdrop-filter: blur(8px);
+}
+.info-panel h3 {
+    font-size: 15px;
+    color: #333;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.info-panel .stat-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: #666;
+    line-height: 1.8;
+}
+.info-panel .stat-row .value {
+    color: #1890ff;
+    font-weight: 600;
+}
+
+/* 序号标记样式 */
+.traj-marker {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    border: 2px solid #fff;
+    cursor: pointer;
+    transition: transform 0.15s;
+}
+.traj-marker:hover { transform: scale(1.15); }
+.traj-marker.start { background: #52c41a; }
+.traj-marker.end   { background: #f5222d; }
+.traj-marker.way   { background: #1890ff; }
+
+/* InfoWindow 自定义样式 */
+.traj-info-window {
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    min-width: 220px;
+    overflow: hidden;
+}
+.traj-info-window .iw-header {
+    background: linear-gradient(135deg, #1890ff, #096dd9);
+    color: #fff;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.traj-info-window .iw-body {
+    padding: 12px 14px;
+}
+.traj-info-window .iw-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    line-height: 2;
+    color: #555;
+}
+.traj-info-window .iw-row .label { color: #999; }
+.traj-info-window .iw-row .val { color: #333; font-weight: 500; }
+.traj-info-window .iw-arrow {
+    position: absolute;
+    bottom: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0; height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-top: 8px solid #fff;
+}
