@@ -1,8 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Button } from "@blueprintjs/core";
 
 import "./map.css";
 
-function escapeHtml(str) {
+function escapeHtml(str: string|null) {
     if (!str) return '';
     return String(str)
         .replace(/&/g, '&amp;')
@@ -14,8 +15,11 @@ function escapeHtml(str) {
 export default function GeoMap() {
     const mapDomRef = useRef(null);
     const mapRef = useRef(null);
+    const mouseToolRef = useRef(null);
+    const polyEditorRef = useRef(null);
+    const [isDrawing, setIsDrawing] = useState(false);
 
-    const drawTrajectory = (AMap) => {
+    const drawTrajectory = (AMap:any) => {
         const trajectoryData = [
             { event_name: '出发·公司', event_time: '2026-08-13 08:30:00', lon: 116.397428, lat: 39.90923 },
             { event_name: '途经·地铁站', event_time: '2026-08-13 08:45:00', lon: 116.405, lat: 39.915 },
@@ -50,7 +54,7 @@ export default function GeoMap() {
         map.add(polyline);
 
         // --- 4.4 在每个轨迹点添加标记 ---
-        const markers = [];
+        const markers:any = [];
         const infoWindow = new AMap.InfoWindow({
             isCustom: true,
             offset: new AMap.Pixel(0, -42),
@@ -97,12 +101,32 @@ export default function GeoMap() {
         map.setFitView([polyline].concat(markers), false, [80, 80, 80, 80]);
     };
 
+    const toggleDrawPolygon = () => {
+        const mouseTool = mouseToolRef.current;
+        if (!mouseTool) return;
+
+        if (isDrawing) {
+            mouseTool.close(true);
+            setIsDrawing(false);
+        } else {
+            mouseTool.polygon({
+                fillColor: '#C4612F',
+                fillOpacity: 0.3,
+                strokeColor: '#A94E22',
+                strokeWeight: 2,
+                strokeStyle: 'solid',
+            });
+            setIsDrawing(true);
+        }
+    };
+
     useEffect(() => {
         (window as any).AMapLoader.load({
             key: "d39920f829c920ba5e6d14abbd52e88f",
             version: "2.0",
-            plugins: ['AMap.Scale', 'AMap.ToolBar']
-        }).then((AMap) => {
+            plugins: ['AMap.Scale', 'AMap.ToolBar', 'AMap.MouseTool', 'AMap.PolygonEditor']
+        })
+        .then((AMap:any) => {
             const map = mapRef.current = new AMap.Map(mapDomRef.current, {
                 viewMode: '2D',
                 zoom: 13,
@@ -111,16 +135,54 @@ export default function GeoMap() {
             map.addControl(new AMap.Scale());
             map.addControl(new AMap.ToolBar({ position: 'RT' }));
 
+            const mouseTool = new AMap.MouseTool(map);
+            mouseToolRef.current = mouseTool;
+
+            mouseTool.on('draw', (event: any) => {
+                setIsDrawing(false);
+                const polygon = event.obj;
+                const path = polygon.getPath();
+                const coordinates = path.map((lngLat: any) => ({
+                    lng: lngLat.getLng(),
+                    lat: lngLat.getLat()
+                }));
+                console.log('绘制完成的多边形顶点坐标:', coordinates);
+
+                // 进入编辑状态
+                const polyEditor = new AMap.PolygonEditor(map, polygon);
+                polyEditorRef.current = polyEditor;
+                polyEditor.open();
+
+                // 监听编辑事件
+                polyEditor.on('adjust', () => {
+                    const updatedPath = polygon.getPath();
+                    const updatedCoordinates = updatedPath.map((lngLat: any) => ({
+                        lng: lngLat.getLng(),
+                        lat: lngLat.getLat()
+                    }));
+                    console.log('多边形顶点已调整:', updatedCoordinates);
+                });
+            });
+
             drawTrajectory(AMap);
 
-        }).catch((e) => {
-            console.error(e); //加载错误提示
+        }).catch((e:any) => {
+            console.error(e);
         });
-    });
+    }, []);
 
     return (
         <div className="relative w-full h-full">
             <div ref={mapDomRef} className="absolute inset-0"></div>
+            <Button className="absolute" icon="polygon-filter" intent="warning"
+                onClick={toggleDrawPolygon}
+                style={{
+                    top: "20px", right: "100px",
+                    color: isDrawing ? '#C4612F' : '#1F2421',
+                    fontWeight: isDrawing ? 500 : 400,
+                }}
+                text={isDrawing ? '完成绘制' : '绘制多边形'}
+            />
         </div>
     );
 }
