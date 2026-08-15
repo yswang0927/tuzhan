@@ -212,8 +212,8 @@ export function throttle<T extends (...args: any[]) => any>(
  * 示例3(上下参照示例1,2类似: data-region="top|bottom").
  */
 export interface LayoutResizerOptions {
-  trigger: string | HTMLElement; // [必须]定义resizer手柄是哪个DOM元素
-  target?: string | HTMLElement;  // [可选]定义resize目标DOM元素
+  trigger: string | HTMLElement | null | undefined; // [必须]定义resizer手柄是哪个DOM元素
+  target?: string | HTMLElement | null | undefined;  // [可选]定义resize目标DOM元素
   onResizeStart?: (e: MouseEvent) => void;
   onResizing?: (size: number, region: string, e: MouseEvent) => void;
   onResizeEnd?: (size: number, e: MouseEvent) => void;
@@ -248,7 +248,7 @@ export class LayoutResizer {
   constructor(options: LayoutResizerOptions) {
     const opts = (typeof options === 'object' && options !== null) ? options : {} as LayoutResizerOptions;
 
-    let triggerIn: string | HTMLElement | undefined = opts.trigger;
+    let triggerIn: string | HTMLElement | null | undefined = opts.trigger;
     if (typeof triggerIn === 'string') {
       this.trigger = document.querySelector<HTMLElement>(triggerIn);
     } else if (triggerIn instanceof HTMLElement) {

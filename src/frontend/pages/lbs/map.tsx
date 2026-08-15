@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Button } from "@blueprintjs/core";
+import { Button, ButtonGroup } from "@blueprintjs/core";
+import { useL10n } from "@/l10n";
 
 import "./map.css";
 
@@ -13,6 +14,7 @@ function escapeHtml(str: string|null) {
 }
 
 export default function GeoMap() {
+    const { t } = useL10n();
     const mapDomRef = useRef(null);
     const mapRef = useRef(null);
     const mouseToolRef = useRef(null);
@@ -21,12 +23,12 @@ export default function GeoMap() {
 
     const drawTrajectory = (AMap:any) => {
         const trajectoryData = [
-            { event_name: '出发·公司', event_time: '2026-08-13 08:30:00', lon: 116.397428, lat: 39.90923 },
-            { event_name: '途经·地铁站', event_time: '2026-08-13 08:45:00', lon: 116.405, lat: 39.915 },
-            { event_name: '途经·便利店', event_time: '2026-08-13 09:00:00', lon: 116.412, lat: 39.920 },
-            { event_name: '途经·公园',   event_time: '2026-08-13 09:20:00', lon: 116.420, lat: 39.925 },
-            { event_name: '途经·商场',   event_time: '2026-08-13 09:40:00', lon: 116.428, lat: 39.918 },
-            { event_name: '到达·客户公司', event_time: '2026-08-13 10:00:00', lon: 116.435, lat: 39.910 },
+            { event_name: '出发·公司', event_time: '2026-08-13 08:30:00', lon: -92.4722, lat: 35.0812 },
+            { event_name: '途经·地铁站', event_time: '2026-08-13 08:45:00', lon: -71.1894, lat: 41.9718 },
+            //{ event_name: '途经·便利店', event_time: '2026-08-13 09:00:00', lon: -123.2746, lat: 44.5928 },
+            //{ event_name: '途经·公园',   event_time: '2026-08-13 09:20:00', lon: -122.6363, lat: 45.4805 },
+            { event_name: '途经·商场',   event_time: '2026-08-13 09:40:00', lon: -78.44, lat: 35.64 },
+            { event_name: '到达·客户公司', event_time: '2026-08-13 10:00:00', lon: -98.407455, lat: 29.303797 },
         ];
 
         const map = mapRef.current;
@@ -57,7 +59,7 @@ export default function GeoMap() {
         const markers:any = [];
         const infoWindow = new AMap.InfoWindow({
             isCustom: true,
-            offset: new AMap.Pixel(0, -42),
+            offset: new AMap.Pixel(0, -30),
         });
 
         trajectoryData.forEach(function (point, index) {
@@ -98,7 +100,7 @@ export default function GeoMap() {
         map.add(markers);
 
         // --- 4.5 自动调整视野，展示全部轨迹 ---
-        map.setFitView([polyline].concat(markers), false, [80, 80, 80, 80]);
+        map.setFitView([polyline].concat(markers), false, [200, 200, 200, 200]);
     };
 
     const toggleDrawPolygon = () => {
@@ -174,15 +176,18 @@ export default function GeoMap() {
     return (
         <div className="relative w-full h-full">
             <div ref={mapDomRef} className="absolute inset-0"></div>
-            <Button className="absolute" icon="polygon-filter" intent="warning"
-                onClick={toggleDrawPolygon}
-                style={{
-                    top: "20px", right: "100px",
-                    color: isDrawing ? '#C4612F' : '#1F2421',
-                    fontWeight: isDrawing ? 500 : 400,
-                }}
-                text={isDrawing ? '完成绘制' : '绘制多边形'}
-            />
+            <div className="absolute map-toolbar" style={{ top: "10px", left: "50%", transform: "translateX(-50%)", zIndex: 100 }}>
+                <ButtonGroup>
+                    <Button className="absolute" icon="polygon-filter" intent="warning"
+                        onClick={toggleDrawPolygon}
+                        style={{
+                            fontWeight: isDrawing ? 500 : 400,
+                        }}
+                        text={isDrawing ? '完成绘制' : '绘制多边形'}
+                    />
+                </ButtonGroup>
+            </div>
+
         </div>
     );
 }

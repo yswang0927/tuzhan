@@ -1,34 +1,27 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
-    Card,
-    Elevation,
-    FormGroup,
-    Button,
     MenuItem,
     NonIdealState,
     NonIdealStateIconSize,
     Spinner,
-    SpinnerSize
+    SpinnerSize,
 } from "@blueprintjs/core";
 import { type ItemRenderer, Suggest } from "@blueprintjs/select";
-import { DateRangeInput } from "@blueprintjs/datetime";
-import { zhCN } from "date-fns/locale";
-import GeoMap from "./map";
+
 import { debounce } from "@/utils";
-import { TrajectoryLocIcon } from "@/utils/icons";
 import { useL10n } from "@/l10n";
 
-interface OptionItem {
+export interface OptionItem {
     id: string;
     name: string;
 }
 
-interface PersonSuggestProps {
+export interface ObjectSuggestProps {
     onSelected?: (selectedItem: string | null) => void;
     defaultValue?: string | null;
 }
 
-function PersonSuggest({ onSelected, defaultValue = '' }: PersonSuggestProps) {
+export function ObjectSuggest({ onSelected, defaultValue = '' }: ObjectSuggestProps) {
     const { t } = useL10n();
     const [items, setItems] = useState<OptionItem[]>([]);
     const [loading, setLoading] = useState<boolean>(false);
@@ -61,7 +54,7 @@ function PersonSuggest({ onSelected, defaultValue = '' }: PersonSuggestProps) {
             // 模拟请求后端接口，可以带上当前的 query 条件
             setTimeout(() => {
                 let data:[OptionItem] = [];
-                for (let i = 1; i < 100; i++) {
+                for (let i = 1; i <= 20; i++) {
                     data.push({id: `person${i}`, name: `Person${i}`});
                 }
                 const filtered = queryStr ? data.filter(item => item.name.toLowerCase().includes(queryStr)) : data;
@@ -125,55 +118,5 @@ function PersonSuggest({ onSelected, defaultValue = '' }: PersonSuggestProps) {
                 )
             }
         />
-    );
-}
-
-/**
- * 人员轨迹定位。
- * 指定对象ID + 时间段， 查询并可视化其轨迹路线，按数据源用不同的图标展示，
- * 时间倒序列表展示详情。
- */
-export default function PersonTrajectoryLocation() {
-    const { t } = useL10n();
-
-    return (
-        <div className="map-app-panel">
-            <div className="map-app-header">
-                <div className="map-app-header-icon">
-                    <TrajectoryLocIcon />
-                </div>
-                <div className="map-app-header-title">{t('人员轨迹定位')}</div>
-            </div>
-
-            <div className="map-app-main relative">
-                <div className="absolute inset-0">
-                    <GeoMap />
-
-                    <div className="absolute map-app-search-panel" style={{left: "1rem", top: "1rem", width: "260px", zIndex: 10}}>
-                        <Card elevation={Elevation.TWO}>
-                            <h3 style={{marginTop:0}}>{t('人员轨迹查询')}</h3>
-                            <form>
-                            <FormGroup label={t('选择对象')}>
-                                <PersonSuggest />
-                            </FormGroup>
-
-                            <FormGroup label={t('选择时间范围')}>
-                                <DateRangeInput
-                                    dateFnsFormat="yyyy-MM-dd"
-                                    startInputProps={{ placeholder: t('开始时间') }}
-                                    endInputProps={{ placeholder: t('结束时间') }}
-                                    locale={zhCN}
-                                />
-                            </FormGroup>
-
-                            <div>
-                                <Button text={t('查询')} intent="primary" fill={true}/>
-                            </div>
-                            </form>
-                        </Card>
-                    </div>
-                </div>
-            </div>
-        </div>
     );
 }

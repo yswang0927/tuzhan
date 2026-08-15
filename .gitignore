@@ -29,12 +29,5 @@ release
 package-lock.json
 pnpm-lock.yaml
 yarn.lock
-/test-results/
-/playwright-report/
-/playwright/.cache/
 
-test/screenshots
-python/.idea
-python/runtime
-python/server/session_store
-python/server/execution_history
+target

@@ -23,7 +23,7 @@ const dictionaries: Record<LocaleKey, Translations> = {
 };
 
 // 存储在 localStorage 中的 key 名称
-const LANG_STORAGE_KEY = 'miniopal_l10n_lang';
+const LANG_STORAGE_KEY = 'tuzhan_l10n_lang';
 
 // 2. 创建 Context
 const L10nContext = createContext<L10nContextType | null>(null);
@@ -34,7 +34,7 @@ interface L10nProviderProps {
     defaultLang?: LocaleKey;
 }
 
-export function L10nProvider({ children, defaultLang = 'en' }: L10nProviderProps) {
+export function L10nProvider({ children, defaultLang = 'zh-CN' }: L10nProviderProps) {
     const [lang, setLangState] = useState<LocaleKey>(() => {
         // 优先级 1: 尝试从 localStorage 获取
         const savedLang = window.localStorage.getItem(LANG_STORAGE_KEY);
