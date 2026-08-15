@@ -164,6 +164,46 @@ export function throttle<T extends (...args: any[]) => any>(
   return throttled;
 }
 
+/**
+ * 兼容 HTTP/HTTPS 及各浏览器的剪贴板复制工具函数
+ */
+export const copyToClipboard = (text: string): Promise<boolean> => {
+  if (!text) return Promise.resolve(false);
+
+  // 1. 优先使用原生 navigator.clipboard API (HTTPS / localhost 环境)
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+    return navigator.clipboard
+      .writeText(text)
+      .then(() => true)
+      .catch(() => fallbackCopyText(text));
+  }
+
+  // 2. 降级方案: 隐式 textarea + document.execCommand('copy')
+  return Promise.resolve(fallbackCopyText(text));
+};
+
+const fallbackCopyText = (text: string): boolean => {
+  try {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.style.position = "fixed";
+    textArea.style.top = "0";
+    textArea.style.left = "-9999px";
+    textArea.style.opacity = "0";
+
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+
+    const successful = document.execCommand("copy");
+    document.body.removeChild(textArea);
+    return successful;
+  } catch (err) {
+    console.error("Fallback copy failed:", err);
+    return false;
+  }
+};
+
 
 /**
  * 布局resize通用函数, 用于拖动手柄resize 左|右|上|下 区域的大小.

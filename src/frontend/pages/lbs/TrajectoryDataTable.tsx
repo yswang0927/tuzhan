@@ -12,6 +12,7 @@ import {
 } from "@blueprintjs/table";
 
 import { useL10n } from "@/l10n";
+import { copyToClipboard } from "@/utils";
 
 import "@blueprintjs/table/lib/css/table.css";
 
@@ -94,7 +95,7 @@ export const TrajectoryDataTable: React.FC<TrajectoryDataTableProps> = ({
       const col = target.cols[0];
       const text = getCellText(row, col);
       if (text) {
-        navigator.clipboard.writeText(text);
+        copyToClipboard(text);
       }
     }
   }, [getCellText]);
@@ -112,7 +113,7 @@ export const TrajectoryDataTable: React.FC<TrajectoryDataTableProps> = ({
         const lonStr = rowData.lon !== undefined ? rowData.lon.toFixed(6) : "";
         const latStr = rowData.lat !== undefined ? rowData.lat.toFixed(6) : "";
         const rowText = [rowData.idfa_md5 || "", timeStr, lonStr, latStr].join("\t");
-        navigator.clipboard.writeText(rowText);
+        copyToClipboard(rowText);
       }
     }
   }, [data]);
