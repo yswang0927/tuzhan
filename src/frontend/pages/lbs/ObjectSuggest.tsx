@@ -8,6 +8,7 @@ import {
 } from "@blueprintjs/core";
 import { type ItemRenderer, Suggest } from "@blueprintjs/select";
 
+import { getJson } from "@/utils/api";
 import { debounce } from "@/utils";
 import { useL10n } from "@/l10n";
 
@@ -50,21 +51,18 @@ export function ObjectSuggest({ onSelected, defaultValue = '' }: ObjectSuggestPr
 
     const fetchOptions = useCallback((queryStr: string = "") => {
         setLoading(true);
-        try {
-            // 模拟请求后端接口，可以带上当前的 query 条件
-            setTimeout(() => {
-                let data:[OptionItem] = [];
-                for (let i = 1; i <= 20; i++) {
-                    data.push({id: `person${i}`, name: `Person${i}`});
+
+        getJson(`/api/trajectory/objects`, {obj: queryStr})
+            .then(data => {
+                if (Array.isArray(data)) {
+                    setItems(data.map(objId => {return {id: objId, name: objId}}));
                 }
-                const filtered = queryStr ? data.filter(item => item.name.toLowerCase().includes(queryStr)) : data;
-                console.log('>> filtered: ', filtered.length);
-                setItems(filtered);
-                setLoading(false);
-            }, 500)
-        } catch (err) {
-            console.error("加载列表失败", err);
-        }
+            })
+            .catch(err => {
+                // TODO Toast提示
+            }).finally(() => {
+               setLoading(false);
+            });
     }, []);
 
     const queryFetchOptions = useRef(debounce(function(text: string) {

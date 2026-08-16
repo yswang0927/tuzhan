@@ -352,7 +352,7 @@ export class LayoutResizer {
     if (!this.trigger) return;
 
     requestAnimationFrame(() => {
-      this.trigger!.addEventListener('mousedown', this._handleMouseDown);
+      this.trigger?.addEventListener('mousedown', this._handleMouseDown);
 
       // 从记忆恢复
       if (this._key) {
@@ -384,7 +384,6 @@ export class LayoutResizer {
     this._createMask();
     this.onResizeStart(e);
     this.trigger.classList.add('dragging');
-    document.body.style.userSelect = 'none';
 
     window.addEventListener('mousemove', this._handleMouseMove);
     window.addEventListener('mouseup', this._handleMouseUp);
@@ -416,12 +415,14 @@ export class LayoutResizer {
   private _handleMouseUp(e: MouseEvent): void {
     window.removeEventListener('mousemove', this._handleMouseMove);
     window.removeEventListener('mouseup', this._handleMouseUp);
+
     this._removeMask();
     this.onResizeEnd(this._currentSize, e);
+
     if (this.trigger) {
       this.trigger.classList.remove('dragging');
     }
-    document.body.style.userSelect = '';
+
     // 记忆
     if (this._key) {
       window.localStorage.setItem(this._key, String(this._currentSize));
@@ -440,6 +441,10 @@ export class LayoutResizer {
 
   // 创建全屏透明遮罩
   private _createMask(): void {
+    if (this._maskElement) {
+      this._maskElement.parentElement?.removeChild(this._maskElement);
+    }
+
     const mask = this._maskElement = document.createElement('div');
     Object.assign(mask.style, {
       position: 'fixed',
@@ -449,6 +454,7 @@ export class LayoutResizer {
       height: '100vh',
       zIndex: '999999', // 确保在最上层，挡住 iframe 和其他业务组件
       backgroundColor: 'transparent',
+      userSelect: 'none',
       cursor: this._dir === 'horizontal' ? 'col-resize' : 'row-resize',
     });
 

@@ -10,6 +10,14 @@ import java.util.Optional;
 public interface TrajectoryQuery {
 
     /**
+     * 根据关键词搜索对象信息。
+     * @param keyword 关键词
+     * @param limit 最大返回数据量
+     * @return
+     */
+    List<String> searchObjects(String keyword, int limit);
+
+    /**
      * 指定对象+时间段，查询其轨迹数据。
      *
      * @param objectId

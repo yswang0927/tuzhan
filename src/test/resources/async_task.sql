@@ -15,10 +15,10 @@ CREATE TABLE async_task (
 
 -- 审计与时间
     creator         VARCHAR(64)  NOT NULL,
-    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    started_at      TIMESTAMPTZ,
-    finished_at     TIMESTAMPTZ,
+    created_at      bigint  NOT NULL DEFAULT 0,
+    updated_at      bigint  NOT NULL DEFAULT 0,
+    started_at      bigint,
+    finished_at     bigint,
     retry_count     INT          NOT NULL DEFAULT 0,
     max_retries     INT          NOT NULL DEFAULT 0,
 

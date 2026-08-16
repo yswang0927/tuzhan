@@ -362,6 +362,10 @@ input::placeholder {
   background-color: #DCE0E5;
   border-radius: 3px;
 }
+.layout-resizer.dragging::after,
+.layout-resizer:hover::after {
+  background-color: #C5CBD3;
+}
 .layout-resizer[data-region="left"],
 .layout-resizer[data-region="right"] {
   top: 0;

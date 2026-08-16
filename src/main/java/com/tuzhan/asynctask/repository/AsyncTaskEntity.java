@@ -38,6 +38,11 @@ public class AsyncTaskEntity {
     private Integer estimatedCost;
     private Integer timeoutSeconds;
 
+    public AsyncTaskEntity() {
+        this.createdAt = Instant.now();
+        this.updatedAt = this.createdAt;
+    }
+
     public String getTaskId() {
         return taskId;
     }

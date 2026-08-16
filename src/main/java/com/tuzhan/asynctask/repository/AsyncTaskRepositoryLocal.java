@@ -31,8 +31,8 @@ public class AsyncTaskRepositoryLocal extends BaseRepository implements AsyncTas
                 task.getPriority(),
                 task.getQueryParams(),
                 task.getCreator(),
-                task.getCreatedAt(),
-                task.getUpdatedAt(),
+                task.getCreatedAt().getEpochSecond(),
+                task.getUpdatedAt().getEpochSecond(),
                 0,
                 0,
                 task.getTimeoutSeconds()
@@ -67,7 +67,7 @@ public class AsyncTaskRepositoryLocal extends BaseRepository implements AsyncTas
 
         String sql = "update async_task set status = ?, started_at = ? where task_id = ?";
         try {
-            return LOCAL_JDBC.executeUpdate(sql, new Object[]{ TaskStatus.RUNNING.name(), startedAt, taskId }) > 0;
+            return LOCAL_JDBC.executeUpdate(sql, new Object[]{ TaskStatus.RUNNING.name(), startedAt.getEpochSecond(), taskId }) > 0;
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -84,7 +84,7 @@ public class AsyncTaskRepositoryLocal extends BaseRepository implements AsyncTas
                 TaskStatus.SUCCESS.name(),
                 resultPath,
                 resultMeta,
-                finishedAt,
+                finishedAt.getEpochSecond(),
                 taskId
         };
 
@@ -104,7 +104,7 @@ public class AsyncTaskRepositoryLocal extends BaseRepository implements AsyncTas
         String sql = "update async_task set status = ?, finished_at = ?, errorMsg = ? where task_id = ?";
         Object[] params = {
                 TaskStatus.FAILED.name(),
-                finishedAt,
+                finishedAt.getEpochSecond(),
                 errorMsg,
                 taskId
         };
@@ -125,7 +125,7 @@ public class AsyncTaskRepositoryLocal extends BaseRepository implements AsyncTas
         String sql = "update async_task set status = ?, updated_at = ?, errorMsg = ? where task_id = ?";
         Object[] params = {
                 status != null ? status.name() : null,
-                updatedAt,
+                updatedAt.getEpochSecond(),
                 errorMsg,
                 taskId
         };
@@ -146,7 +146,7 @@ public class AsyncTaskRepositoryLocal extends BaseRepository implements AsyncTas
         String sql = "update async_task set progress = ?, updated_at = ? where task_id = ?";
         Object[] params = {
                 progress != null ? progress.intValue() : 0,
-                updatedAt,
+                updatedAt.getEpochSecond(),
                 taskId
         };
 
@@ -163,8 +163,8 @@ public class AsyncTaskRepositoryLocal extends BaseRepository implements AsyncTas
             return false;
         }
 
-        String sql = "update async_task set retry_count = retry_count + 1, status = ?, error_msg = ? where task_id = ?";
-        Object[] params = { TaskStatus.PENDING.name(), errorMsg, taskId };
+        String sql = "update async_task set retry_count = retry_count + 1, status = ?, error_msg = ?, updated_at = ? where task_id = ?";
+        Object[] params = { TaskStatus.PENDING.name(), errorMsg, Instant.now().getEpochSecond(), taskId };
 
         try {
             return LOCAL_JDBC.executeUpdate(sql, params) > 0;
@@ -192,6 +192,7 @@ public class AsyncTaskRepositoryLocal extends BaseRepository implements AsyncTas
         if (limit <= 0) {
             limit = 1;
         }
+
         String sql = "select * from async_task where status = ? order by created_at asc";
         try {
             return LOCAL_JDBC.queryForList(AsyncTaskEntity.class, sql, new Object[] { TaskStatus.PENDING.name() }, 1, limit);
@@ -209,7 +210,7 @@ public class AsyncTaskRepositoryLocal extends BaseRepository implements AsyncTas
         String sql = "select * from async_task WHERE status = ? AND updated_at < ?";
         Object[] params = {
                 TaskStatus.RUNNING.name(),
-                timeoutThreshold
+                timeoutThreshold.getEpochSecond()
         };
 
         try {
@@ -226,7 +227,7 @@ public class AsyncTaskRepositoryLocal extends BaseRepository implements AsyncTas
         }
 
         String sql = "select * from async_task WHERE created_at < ?";
-        Object[] params = { expireThreshold };
+        Object[] params = { expireThreshold.getEpochSecond() };
 
         try {
             return LOCAL_JDBC.queryForList(AsyncTaskEntity.class, sql, params);
