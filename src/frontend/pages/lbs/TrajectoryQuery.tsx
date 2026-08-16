@@ -24,7 +24,9 @@ import { useL10n } from "@/l10n";
 
 import GeoMap from "./map";
 import { ObjectSuggest } from "./ObjectSuggest";
-import { TrajectoryDataTable, type TrajectoryData } from "./TrajectoryDataTable";
+import type { TrajectoryData } from "./types";
+import { TrajectoryDataTable } from "./TrajectoryDataTable";
+import { useTrajectoryStore } from './store';
 
 
 const DATE_PICKER_LOCALES = {
@@ -39,6 +41,7 @@ interface PanelEmptyProps {
     // empty props
 }
 
+
 /**
  * 人员轨迹定位。
  * 指定对象ID + 时间段， 查询并可视化其轨迹路线，按数据源用不同的图标展示，
@@ -46,6 +49,8 @@ interface PanelEmptyProps {
  */
 const TrajectoryLocationPanel: React.FC<PanelProps<PanelEmptyProps>> = (props) => {
     const { t, lang } = useL10n();
+    const setTrajectoryData = useTrajectoryStore(state => state.setTrajectoryData);
+    const setTableLoading = useTrajectoryStore(state => state.setTableLoading);
     const { register, handleSubmit, control, setValue, watch, formState: { errors } } = useForm({
         defaultValues: {
             objectId: null as string | null,
@@ -64,6 +69,7 @@ const TrajectoryLocationPanel: React.FC<PanelProps<PanelEmptyProps>> = (props) =
     const doQuery = (formData: any) => {
         console.log(">>> formData: ", formData);
         setQuerying(true);
+        setTableLoading(true);
         getJson('/api/trajectory/query-trajectories', {
             ...formData,
             startTime: formData.startTime ? format(formData.startTime, 'yyyy-MM-dd HH:mm:ss') : '',
@@ -71,12 +77,15 @@ const TrajectoryLocationPanel: React.FC<PanelProps<PanelEmptyProps>> = (props) =
         })
             .then(data => {
                 console.log(">>> data: ", data);
+                setTrajectoryData(data || []);
             })
             .catch(err => {
                 console.error(">>> err: ", err);
+                setTrajectoryData([]);
             })
             .finally(() => {
                 setQuerying(false);
+                setTableLoading(false);
             });
     };
 
@@ -142,6 +151,8 @@ const TrajectoryLocationPanel: React.FC<PanelProps<PanelEmptyProps>> = (props) =
  */
 const LastLocationPanel: React.FC<PanelProps<PanelEmptyProps>> = (props) => {
     const { t } = useL10n();
+    const setTrajectoryData = useTrajectoryStore(state => state.setTrajectoryData);
+    const setTableLoading = useTrajectoryStore(state => state.setTableLoading);
     const { handleSubmit, control, formState: { errors } } = useForm({
         defaultValues: {
             objectId: null as string | null,
@@ -153,15 +164,19 @@ const LastLocationPanel: React.FC<PanelProps<PanelEmptyProps>> = (props) => {
     const doQuery = (formData: any) => {
         console.log(">>> formData: ", formData);
         setQuerying(true);
+        setTableLoading(true);
         getJson('/api/trajectory/query-lastlocation', formData)
             .then(data => {
                 console.log(">>> data: ", data);
+                setTrajectoryData(Array.isArray(data) ? data : data ? [data] : []);
             })
             .catch(err => {
                 console.error(">>> err: ", err);
+                setTrajectoryData([]);
             })
             .finally(() => {
                 setQuerying(false);
+                setTableLoading(false);
             });
     };
 
@@ -238,6 +253,8 @@ const MenuListPanel: React.FC<PanelProps<PanelEmptyProps>> = (props) => {
 
 export default function TrajectoryQuery() {
     const { t } = useL10n();
+    const trajectoryData = useTrajectoryStore(state => state.trajectoryData);
+    const tableLoading = useTrajectoryStore(state => state.tableLoading);
     const searchPanelRef = useRef<HTMLDivElement>(null);
     const resizerDomRef = useRef<HTMLDivElement>(null);
 
@@ -246,6 +263,12 @@ export default function TrajectoryQuery() {
         renderPanel: MenuListPanel,
         title: t('轨迹查询'),
     };
+
+    useEffect(() => {
+        return () => {
+            useTrajectoryStore.getState().reset();
+        };
+    }, []);
 
     useEffect(() => {
         if (!resizerDomRef.current) {
@@ -293,7 +316,7 @@ export default function TrajectoryQuery() {
             <div className="relative map-app-results" style={{ height: '300px' }}>
                 <div ref={resizerDomRef} className="layout-resizer" data-region="bottom" data-min={100} data-max={600}></div>
                 <div className="absolute inset-0">
-                    <TrajectoryDataTable data={[]} loading={true} onRowClick={onDataTableRowClick} />
+                    <TrajectoryDataTable data={trajectoryData} loading={tableLoading} onRowClick={onDataTableRowClick} />
                 </div>
             </div>
 

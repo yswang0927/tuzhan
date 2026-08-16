@@ -13,16 +13,10 @@ import {
 
 import { useL10n } from "@/l10n";
 import { copyToClipboard } from "@/utils";
+import type { TrajectoryData } from "./types";
 
 import "@blueprintjs/table/lib/css/table.css";
 
-// 定义数据项的接口类型，匹配 clickhouse_gps_sql.txt 中的字段设计
-export interface TrajectoryData {
-  idfa_md5: string;     // 帐号唯一ID
-  event_time: number;   // 绝对时间戳(秒)
-  lon: number;          // 经度
-  lat: number;          // 纬度
-}
 
 export interface TrajectoryDataTableProps {
   data: TrajectoryData[];
@@ -73,11 +67,9 @@ export const TrajectoryDataTable: React.FC<TrajectoryDataTableProps> = ({
     if (!rowData) return "";
     switch (col) {
       case 0:
-        return rowData.idfa_md5 || "";
+        return rowData.objectId || "";
       case 1:
-        return rowData.event_time
-          ? new Date(rowData.event_time * 1000).toLocaleString()
-          : "";
+        return rowData.eventTime || "";
       case 2:
         return rowData.lon !== undefined ? rowData.lon.toFixed(6) : "";
       case 3:
@@ -107,12 +99,10 @@ export const TrajectoryDataTable: React.FC<TrajectoryDataTableProps> = ({
     if (rowIndex != null && rowIndex >= 0 && rowIndex < data.length) {
       const rowData = data[rowIndex];
       if (rowData) {
-        const timeStr = rowData.event_time
-          ? new Date(rowData.event_time * 1000).toLocaleString()
-          : "";
+        const timeStr = rowData.eventTime || "";
         const lonStr = rowData.lon !== undefined ? rowData.lon.toFixed(6) : "";
         const latStr = rowData.lat !== undefined ? rowData.lat.toFixed(6) : "";
-        const rowText = [rowData.idfa_md5 || "", timeStr, lonStr, latStr].join("\t");
+        const rowText = [rowData.objectId || "", timeStr, lonStr, latStr].join("\t");
         copyToClipboard(rowText);
       }
     }
@@ -141,23 +131,23 @@ export const TrajectoryDataTable: React.FC<TrajectoryDataTableProps> = ({
     return <Cell tooltip={tooltipText}>{text}</Cell>;
   };
 
-  // 渲染 IDFA_MD5 列
+  // 渲染 Object 列
   const renderIdfaCell = (rowIndex: number) => {
     const rowData = data[rowIndex];
-    return renderCell(rowData?.idfa_md5 || "-", rowData?.idfa_md5);
+    return renderCell(rowData?.objectId || "-", rowData?.objectId);
   };
 
   // 渲染时间列（将秒级时间戳转换为本地可读的日期格式）
   const renderTimeCell = (rowIndex: number) => {
     const rowData = data[rowIndex];
-    if (!rowData || !rowData.event_time) {
+    if (!rowData || !rowData.eventTime) {
       return renderCell("-");
     }
     try {
-      const formattedTime = new Date(rowData.event_time * 1000).toLocaleString();
+      const formattedTime = new Date(rowData.eventTime).toLocaleString();
       return renderCell(formattedTime, formattedTime);
     } catch (e) {
-      return renderCell(String(rowData.event_time));
+      return renderCell(String(rowData.eventTime));
     }
   };
 
@@ -175,7 +165,7 @@ export const TrajectoryDataTable: React.FC<TrajectoryDataTableProps> = ({
     return renderCell(latText);
   };
 
-  const numRows = loading ? 5 : data.length;
+  const numRows = loading ? 2 : data.length;
 
   const loadingOptions = loading
     ? [TableLoadingOption.CELLS, TableLoadingOption.COLUMN_HEADERS]

@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Button, ButtonGroup } from "@blueprintjs/core";
 import { useL10n } from "@/l10n";
+import { useTrajectoryStore } from './store';
 
 import "./map.css";
 
-function escapeHtml(str: string|null) {
+function escapeHtml(str: string | null) {
     if (!str) return '';
     return String(str)
         .replace(/&/g, '&amp;')
@@ -21,24 +22,29 @@ export default function GeoMap() {
     const polyEditorRef = useRef(null);
     const [isDrawing, setIsDrawing] = useState(false);
 
-    const drawTrajectory = (AMap:any) => {
-        const trajectoryData = [
-            { event_name: '出发·公司', event_time: '2026-08-13 08:30:00', lon: -92.4722, lat: 35.0812 },
-            { event_name: '途经·地铁站', event_time: '2026-08-13 08:45:00', lon: -71.1894, lat: 41.9718 },
-            //{ event_name: '途经·便利店', event_time: '2026-08-13 09:00:00', lon: -123.2746, lat: 44.5928 },
-            //{ event_name: '途经·公园',   event_time: '2026-08-13 09:20:00', lon: -122.6363, lat: 45.4805 },
-            { event_name: '途经·商场',   event_time: '2026-08-13 09:40:00', lon: -78.44, lat: 35.64 },
-            { event_name: '到达·客户公司', event_time: '2026-08-13 10:00:00', lon: -98.407455, lat: 29.303797 },
-        ];
+    const trajectoryData = useTrajectoryStore(state => state.trajectoryData);
+    const AMapRef = useRef<any>(null);
+    const overlaysRef = useRef<any[]>([]);
+    const [mapReady, setMapReady] = useState(false);
 
-        const map = mapRef.current;
+    const drawTrajectory = useCallback(() => {
+        const map = mapRef.current as any;
+        const AMap = AMapRef.current;
+        if (!map || !AMap) return;
 
-        // --- 4.2 将轨迹数据转换为 AMap 坐标路径 [lng, lat] ---
-        const path = trajectoryData.map(function (p) {
-            return [p.lon, p.lat];
-        });
+        // --- 清除旧的轨迹 ---
+        if (overlaysRef.current.length > 0) {
+            map.remove(overlaysRef.current);
+            overlaysRef.current = [];
+        }
 
-        // --- 4.3 绘制轨迹折线 ---
+        if (!trajectoryData || trajectoryData.length === 0) return;
+
+        // --- 将轨迹数据转换为 AMap 坐标路径 [lng, lat] ---
+        const path = trajectoryData.filter(p => p.lon !== undefined && p.lat !== undefined).map(p => [p.lon, p.lat]);
+        if (path.length === 0) return;
+
+        // --- 绘制轨迹折线 ---
         const polyline = new AMap.Polyline({
             path: path,
             isOutline: true,
@@ -54,15 +60,18 @@ export default function GeoMap() {
             zIndex: 50,
         });
         map.add(polyline);
+        overlaysRef.current.push(polyline);
 
-        // --- 4.4 在每个轨迹点添加标记 ---
-        const markers:any = [];
+        // --- 在每个轨迹点添加标记 ---
+        const markers: any = [];
         const infoWindow = new AMap.InfoWindow({
             isCustom: true,
             offset: new AMap.Pixel(0, -30),
         });
 
         trajectoryData.forEach(function (point, index) {
+            if (point.lon === undefined || point.lat === undefined) return;
+
             var isStart = index === 0;
             var isEnd = index === trajectoryData.length - 1;
             var markerClass = isStart ? 'start' : (isEnd ? 'end' : 'way');
@@ -81,11 +90,11 @@ export default function GeoMap() {
                     + '<div class="traj-info-window">'
                     + '  <div class="iw-header">'
                     + '    <span>' + (isStart ? '🟢' : (isEnd ? '🔴' : '🔵')) + '</span>'
-                    + '    <span>' + escapeHtml(point.event_name || ('轨迹点 ' + index)) + '</span>'
+                    + '    <span>' + escapeHtml(point.objectId || ('轨迹点 ' + index)) + '</span>'
                     + '  </div>'
                     + '  <div class="iw-body">'
                     + '    <div class="iw-row"><span class="label">序号</span><span class="val">' + (index + 1) + ' / ' + trajectoryData.length + '</span></div>'
-                    + '    <div class="iw-row"><span class="label">时间</span><span class="val">' + escapeHtml(point.event_time || '-') + '</span></div>'
+                    + '    <div class="iw-row"><span class="label">时间</span><span class="val">' + escapeHtml(point.eventTime || '-') + '</span></div>'
                     + '    <div class="iw-row"><span class="label">经度</span><span class="val">' + point.lon.toFixed(6) + '</span></div>'
                     + '    <div class="iw-row"><span class="label">纬度</span><span class="val">' + point.lat.toFixed(6) + '</span></div>'
                     + '  </div>'
@@ -98,10 +107,17 @@ export default function GeoMap() {
             markers.push(marker);
         });
         map.add(markers);
+        overlaysRef.current.push(...markers);
 
-        // --- 4.5 自动调整视野，展示全部轨迹 ---
+        // --- 自动调整视野，展示全部轨迹 ---
         map.setFitView([polyline].concat(markers), false, [200, 200, 200, 200]);
-    };
+    }, [trajectoryData]);
+
+    useEffect(() => {
+        if (mapReady) {
+            drawTrajectory();
+        }
+    }, [trajectoryData, mapReady, drawTrajectory]);
 
     const toggleDrawPolygon = () => {
         const mouseTool = mouseToolRef.current;
@@ -128,49 +144,50 @@ export default function GeoMap() {
             version: "2.0",
             plugins: ['AMap.Scale', 'AMap.ToolBar', 'AMap.MouseTool', 'AMap.PolygonEditor']
         })
-        .then((AMap:any) => {
-            const map = mapRef.current = new AMap.Map(mapDomRef.current, {
-                viewMode: '2D',
-                zoom: 13,
-            });
+            .then((AMap: any) => {
+                const map = mapRef.current = new AMap.Map(mapDomRef.current, {
+                    viewMode: '2D',
+                    zoom: 13,
+                });
+                AMapRef.current = AMap;
 
-            map.addControl(new AMap.Scale());
-            map.addControl(new AMap.ToolBar({ position: 'RT' }));
+                map.addControl(new AMap.Scale());
+                map.addControl(new AMap.ToolBar({ position: 'RT' }));
 
-            const mouseTool = new AMap.MouseTool(map);
-            mouseToolRef.current = mouseTool;
+                const mouseTool = new AMap.MouseTool(map);
+                mouseToolRef.current = mouseTool;
 
-            mouseTool.on('draw', (event: any) => {
-                setIsDrawing(false);
-                const polygon = event.obj;
-                const path = polygon.getPath();
-                const coordinates = path.map((lngLat: any) => ({
-                    lng: lngLat.getLng(),
-                    lat: lngLat.getLat()
-                }));
-                console.log('绘制完成的多边形顶点坐标:', coordinates);
-
-                // 进入编辑状态
-                const polyEditor = new AMap.PolygonEditor(map, polygon);
-                polyEditorRef.current = polyEditor;
-                polyEditor.open();
-
-                // 监听编辑事件
-                polyEditor.on('adjust', () => {
-                    const updatedPath = polygon.getPath();
-                    const updatedCoordinates = updatedPath.map((lngLat: any) => ({
+                mouseTool.on('draw', (event: any) => {
+                    setIsDrawing(false);
+                    const polygon = event.obj;
+                    const path = polygon.getPath();
+                    const coordinates = path.map((lngLat: any) => ({
                         lng: lngLat.getLng(),
                         lat: lngLat.getLat()
                     }));
-                    console.log('多边形顶点已调整:', updatedCoordinates);
+                    console.log('绘制完成的多边形顶点坐标:', coordinates);
+
+                    // 进入编辑状态
+                    const polyEditor = new AMap.PolygonEditor(map, polygon);
+                    polyEditorRef.current = polyEditor;
+                    polyEditor.open();
+
+                    // 监听编辑事件
+                    polyEditor.on('adjust', () => {
+                        const updatedPath = polygon.getPath();
+                        const updatedCoordinates = updatedPath.map((lngLat: any) => ({
+                            lng: lngLat.getLng(),
+                            lat: lngLat.getLat()
+                        }));
+                        console.log('多边形顶点已调整:', updatedCoordinates);
+                    });
                 });
+
+                setMapReady(true);
+
+            }).catch((e: any) => {
+                console.error(e);
             });
-
-            drawTrajectory(AMap);
-
-        }).catch((e:any) => {
-            console.error(e);
-        });
     }, []);
 
     return (
