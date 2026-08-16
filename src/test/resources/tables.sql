@@ -9,7 +9,7 @@ CREATE TABLE idfa_gps_detail(
     geohash6 String MATERIALIZED geohashEncode(lon, lat, 6) COMMENT '6位geohash用于快速聚类，精度~600米',
     geohash5 String MATERIALIZED geohashEncode(lon, lat, 5) COMMENT '5位geohash用于快速聚类，精度~2.4公里'
 )
-ENGINE = ReplicatedMergeTree('/clickhouse/tables/{shard}/idfa_gps_detail', '{replica}')
+ENGINE = MergeTree
 PARTITION BY toYYYYMM(dt)
 ORDER BY (idfa_md5, dt, hour, event_time)
 PRIMARY KEY (idfa_md5, dt)

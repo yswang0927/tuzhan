@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<datasources>
+
+    <datasource name="local">
+        <driver-url>jdbc:postgresql://localhost:15432/postgres</driver-url>
+        <user>postgres</user>
+        <password>PG@2026</password>
+        <max-connection-size>50</max-connection-size>
+        <min-connection-size>2</min-connection-size>
+        <show-sql>false</show-sql>
+    </datasource>
+
+    <datasource name="idfa">
+        <driver-class>com.clickhouse.jdbc.Driver</driver-class>
+        <driver-url>jdbc:clickhouse://localhost:18123/idfa?ssl=false</driver-url>
+        <user>idfa</user>
+        <password>idfa@2026</password>
+        <max-connection-size>50</max-connection-size>
+        <min-connection-size>2</min-connection-size>
+        <show-sql>false</show-sql>
+    </datasource>
+
+</datasources>

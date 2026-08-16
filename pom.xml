@@ -107,6 +107,20 @@
 			<classifier>all</classifier>
 		</dependency>
 
+		<dependency>
+			<groupId>org.postgresql</groupId>
+			<artifactId>postgresql</artifactId>
+			<version>42.7.13</version>
+		</dependency>
+
+		<dependency>
+			<groupId>com.gdk</groupId>
+			<artifactId>gdk-db3</artifactId>
+			<version>3.8.2</version>
+			<scope>system</scope>
+			<systemPath>${basedir}/lib/gdk-db3-3.8.2.jar</systemPath>
+		</dependency>
+
 		<!-- 用于日期格式的自动检测解析 -->
 		<dependency>
 			<groupId>com.github.sisyphsu</groupId>

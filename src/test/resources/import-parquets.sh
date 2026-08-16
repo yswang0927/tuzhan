@@ -1,6 +1,6 @@
 #!/bin/zsh
 
-PARQUET_DIR="/Users/yswang/Downloads/11"
+PARQUET_DIR="/Users/szhang/Downloads/11"
 
 for file in ${PARQUET_DIR}/*; do
     echo "正在导入: $file ..."
