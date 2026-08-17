@@ -28,6 +28,7 @@
     "react-draggable": "^4.7.1",
     "react-hook-form": "^7.84.0",
     "react-router-dom": "^7.18.1",
+    "sonner": "^2.0.8",
     "uuid": "^14.0.1",
     "zod": "^4.4.3",
     "zustand": "^5.0.14"

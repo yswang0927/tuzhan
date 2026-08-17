@@ -16,6 +16,7 @@ import { zhCN, zhTW, enUS } from "date-fns/locale";
 import Draggable from 'react-draggable';
 import { useForm, Controller } from "react-hook-form";
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 
 import { TrajectoryLocIcon } from "@/utils/icons";
 import { LayoutResizer } from "@/utils";
@@ -75,18 +76,18 @@ const TrajectoryLocationPanel: React.FC<PanelProps<PanelEmptyProps>> = (props) =
             startTime: formData.startTime ? format(formData.startTime, 'yyyy-MM-dd HH:mm:ss') : '',
             endTime: formData.endTime ? format(formData.endTime, 'yyyy-MM-dd HH:mm:ss') : '',
         })
-            .then(data => {
-                console.log(">>> data: ", data);
-                setTrajectoryData(data || []);
-            })
-            .catch(err => {
-                console.error(">>> err: ", err);
-                setTrajectoryData([]);
-            })
-            .finally(() => {
-                setQuerying(false);
-                setTableLoading(false);
-            });
+        .then(data => {
+            console.log(">>> data: ", data);
+            setTrajectoryData(data || []);
+        })
+        .catch(err => {
+            console.error(">>> err: ", err);
+            setTrajectoryData([]);
+        })
+        .finally(() => {
+            setQuerying(false);
+            setTableLoading(false);
+        });
     };
 
     const startTime = watch('startTime');
@@ -255,8 +256,8 @@ export default function TrajectoryQuery() {
     const { t } = useL10n();
     const trajectoryData = useTrajectoryStore(state => state.trajectoryData);
     const tableLoading = useTrajectoryStore(state => state.tableLoading);
-    const searchPanelRef = useRef<HTMLDivElement>(null);
-    const resizerDomRef = useRef<HTMLDivElement>(null);
+    const searchPanelRef = useRef<HTMLDivElement|null>(null);
+    const resizerDomRef = useRef<HTMLDivElement|null>(null);
 
     const initialPanel: Panel<PanelEmptyProps> = {
         props: {},
