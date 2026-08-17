@@ -3,9 +3,9 @@
 
 <head>
   <meta charset="UTF-8" />
-  <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg" />
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GraphMap</title>
+  <title>时空情报平台</title>
   <style>
     html, body {margin:0; padding: 0; height:100%; height: 100vh;}
     *, *:before, *:after, *:after {box-sizing: border-box;}
@@ -14,7 +14,7 @@
   <script>
     (function() {
       try {
-        const saved = localStorage.getItem('tuzhan_theme') || 'light';
+        const saved = localStorage.getItem('tuzhan_theme') || 'dark';
         let target = saved;
         if (saved === 'system') {
           target = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
@@ -37,8 +37,8 @@
 
 </head>
 
-<body>
-  <div id="root" style="position:absolute;top:0;left:0;width:100%;height:100%;"></div>
+<body class="bp6-dark">
+  <div id="root" style="position:absolute;top:0;left:0;width:100%;height:100%;overflow:hidden;"></div>
   <script type="module" src="./main.tsx"></script>
 </body>
 

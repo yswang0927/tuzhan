@@ -1,4 +1,3 @@
-
 .map-app-panel {
     display: flex;
     flex-direction: column;
@@ -17,12 +16,12 @@
     justify-content: center;
     width: 3rem;
     height: 100%;
-    background-color: rgb(78, 140, 238, 0.1);
-    border-right: 1px solid rgba(0, 0, 0, 0.15);
+    background-color: rgba(56, 189, 248, 0.1);
+    border-right: 1px solid rgba(0, 0, 0, 0.3);
 }
 .map-app-header-icon svg {
-    width: 1.75rem;
-    height: 1.75rem;
+    width: 1.5rem;
+    height: 1.5rem;
 }
 .map-app-header-title {
     height: 100%;

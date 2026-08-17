@@ -1,0 +1,51 @@
+.map-app-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+.map-app-header {
+    display: flex;
+    align-items: center;
+    height: 3rem;
+    border-bottom: 1px solid hsla(0,0%,100%,.2);
+}
+.map-app-header-icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    height: 100%;
+    border-right: 1px solid rgba(0, 0, 0, 0.3);
+}
+.map-app-header-icon svg {
+    width: 1.5rem;
+    height: 1.5rem;
+}
+.map-app-header-title {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    flex: 1;
+    padding: 0 1rem;
+    font-size: 1rem;
+    font-weight: 700;
+}
+.map-app-main {
+    flex: 1;
+    overflow: hidden;
+}
+.map-app-footer {
+    border-top: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+.menu-dot {
+    display: inline-block;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background-color: #f1f1f1;
+}
+.bp6-dark .menu-dot {
+    background-color: #abb3bf;
+}

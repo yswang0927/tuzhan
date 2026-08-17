@@ -15,7 +15,7 @@ export function applyTheme(theme: ThemeType) {
     if (targetTheme === 'dark') {
         document.documentElement.classList.add('dark', 'bp6-dark');
     } else {
-        document.documentElement.classList.remove('dark', 'bp6-dark');
+        document.body.classList.remove('dark', 'bp6-dark');
     }
 }
 
@@ -36,7 +36,7 @@ export function saveTheme(newTheme: ThemeType) {
  */
 export function initTheme() {
     // 1. 优先从 localStorage 提取并立即应用（防止闪烁）
-    let savedTheme: ThemeType = 'light';
+    let savedTheme: ThemeType = 'dark';
     try {
         const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
         if (stored === 'light' || stored === 'dark' || stored === 'system') {

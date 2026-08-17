@@ -350,7 +350,7 @@ input::placeholder {
 .layout-resizer {
   position: absolute;
   z-index: 100;
-  --size: 6px;
+  --size: 8px;
 }
 .layout-resizer::after {
   content: "";
@@ -366,6 +366,14 @@ input::placeholder {
 .layout-resizer:hover::after {
   background-color: #C5CBD3;
 }
+.bp6-dark .layout-resizer::after {
+  background-color: #5F6B7C;
+}
+.bp6-dark .layout-resizer.dragging::after,
+.bp6-dark .layout-resizer:hover::after {
+  background-color: #738091;
+}
+
 .layout-resizer[data-region="left"],
 .layout-resizer[data-region="right"] {
   top: 0;
@@ -425,4 +433,8 @@ input::placeholder {
 
 .bp6-date-range-input {
   flex-wrap: wrap;
+}
+
+.bp6-dark body {
+  background-color: #252a31;
 }

@@ -18,7 +18,7 @@ import { useForm, Controller } from "react-hook-form";
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
-import { TrajectoryLocIcon } from "@/utils/icons";
+import { LogoIcon, TrajectoryLocIcon } from "@/utils/icons";
 import { LayoutResizer } from "@/utils";
 import { getJson } from "@/utils/api";
 import { useL10n } from "@/l10n";
@@ -293,9 +293,9 @@ export default function TrajectoryQuery() {
         <div className="map-app-panel">
             <div className="map-app-header">
                 <div className="map-app-header-icon">
-                    <TrajectoryLocIcon />
+                    <LogoIcon />
                 </div>
-                <div className="map-app-header-title">{t('轨迹查询')}</div>
+                <div className="map-app-header-title">{t('时空情报平台')}</div>
             </div>
 
             <div className="map-app-main relative">
