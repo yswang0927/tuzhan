@@ -1,6 +1,6 @@
-import { Button, Menu, MenuItem, PanelStack2, type Panel, type PanelProps } from "@blueprintjs/core";
+import { CardList, Card, Icon, Classes, PanelStack, type Panel, type PanelProps } from "@blueprintjs/core";
 import { useHomeStore } from "./store";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useMenusConfig, type SubMenuConfig } from "./menusConfig";
 
 const DynamicMenuPanel = (props: PanelProps<{ mainId: string, submenus?: SubMenuConfig[] }>) => {
@@ -19,16 +19,17 @@ const DynamicMenuPanel = (props: PanelProps<{ mainId: string, submenus?: SubMenu
     }
 
     return (
-        <Menu>
-            {submenus.map(submenu => (
-                <MenuItem 
-                    key={submenu.id}
-                    icon={submenu.icon} 
-                    text={submenu.name} 
-                    onClick={() => openPanel(submenu)} 
-                />
+        <CardList bordered={true} compact={true}>
+            {submenus.map(item => (
+                <Card interactive={true} key={item.name} onClick={() => openPanel(item)}>
+                    <span>
+                        <span className="menu-icon"><Icon icon={item.icon} /></span>
+                        <span>{item.name}</span>
+                    </span>
+                    <Icon icon="chevron-right" className={Classes.TEXT_MUTED} />
+                </Card>
             ))}
-        </Menu>
+        </CardList>
     );
 };
 
@@ -36,50 +37,39 @@ export const MainMenuPanelStack = () => {
     const menusConfig = useMenusConfig();
     const mainMenuId = useHomeStore(state => state.mainMenu);
     const setActiveSubMenuId = useHomeStore(state => state.setActiveSubMenuId);
-    
+
     const activeMainMenuConfig = menusConfig.find(m => m.id === mainMenuId);
 
-    // Initial stack based on active main menu
-    const [stack, setStack] = useState<Panel<any>[]>([{
-        title: activeMainMenuConfig?.name || 'Menu',
-        renderPanel: DynamicMenuPanel,
-        props: { mainId: activeMainMenuConfig?.id || 'main', submenus: activeMainMenuConfig?.submenus || [] }
-    }]);
-
-    // Reset stack when main menu changes
+    // Reset sub-menu when main menu changes
     useEffect(() => {
-        const newActiveMainMenuConfig = menusConfig.find(m => m.id === mainMenuId);
-        if (newActiveMainMenuConfig) {
-            setStack([{
-                title: newActiveMainMenuConfig.name,
-                renderPanel: DynamicMenuPanel,
-                props: { mainId: newActiveMainMenuConfig.id, submenus: newActiveMainMenuConfig.submenus }
-            }]);
-            setActiveSubMenuId(null);
-        }
-    }, [mainMenuId, menusConfig, setActiveSubMenuId]);
-
-    // Sync active panel ID to store
-    useEffect(() => {
-        const currentPanel = stack[stack.length - 1];
-        // Skip the root menu panel
-        if (currentPanel && currentPanel.props && currentPanel.props.id) {
-            setActiveSubMenuId(currentPanel.props.id);
-        } else {
-            setActiveSubMenuId(null);
-        }
-    }, [stack, setActiveSubMenuId]);
+        setActiveSubMenuId(null);
+    }, [mainMenuId, setActiveSubMenuId]);
 
     if (!activeMainMenuConfig) {
         return <div className="p-4 bg-red-100 text-red-500">Error: Main menu config not found for {mainMenuId}</div>;
     }
 
+    const initialPanel: Panel<any> = {
+        title: activeMainMenuConfig.name,
+        renderPanel: DynamicMenuPanel as any,
+        props: { mainId: activeMainMenuConfig.id, submenus: activeMainMenuConfig.submenus }
+    };
+
     return (
-        <div style={{ height: "400px", backgroundColor: "var(--bp-colors-gray5)", borderRadius: "6px", boxShadow: "0 0 4px rgba(0,0,0,0.2)" }}>
-            <PanelStack2
-                stack={stack}
-                onOpen={(panel) => setStack(prev => [...prev, panel])}
-                onClose={() => setStack(prev => prev.slice(0, -1))}
+        <div className="map-app-search-panel">
+            <PanelStack
+                key={mainMenuId}
+                initialPanel={initialPanel}
+                showPanelHeader={true}
+                renderActivePanelOnly={true}
+                onOpen={(panel) => {
+                    if (panel.props && (panel.props as any).id) {
+                        setActiveSubMenuId((panel.props as any).id);
+                    }
+                }}
+                onClose={() => {
+                    setActiveSubMenuId(null);
+                }}
             />
         </div>
     );
