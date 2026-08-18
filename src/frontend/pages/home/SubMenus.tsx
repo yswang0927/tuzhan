@@ -46,7 +46,7 @@ export const MainMenuPanelStack = () => {
     }, [mainMenuId, setActiveSubMenuId]);
 
     if (!activeMainMenuConfig) {
-        return <div className="p-4 bg-red-100 text-red-500">Error: Main menu config not found for {mainMenuId}</div>;
+        return <div>Error: Main menu config not found for {mainMenuId}</div>;
     }
 
     const initialPanel: Panel<any> = {
@@ -56,7 +56,7 @@ export const MainMenuPanelStack = () => {
     };
 
     return (
-        <div className="map-app-search-panel">
+        <div className="map-app-search-panel h-full">
             <PanelStack
                 key={mainMenuId}
                 initialPanel={initialPanel}

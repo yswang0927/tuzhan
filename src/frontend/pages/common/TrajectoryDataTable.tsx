@@ -22,7 +22,6 @@ export interface TrajectoryDataTableProps {
   data: TrajectoryData[];
   loading?: boolean;
   onRowClick?: (row: TrajectoryData) => void; // 点击或选中某一行时的回调函数，用于地图高亮联动
-  onSelection?: (regions: Region[]) => void; // 传递给外部的 onSelection 回调
 }
 
 /**
@@ -195,4 +194,3 @@ export const TrajectoryDataTable: React.FC<TrajectoryDataTableProps> = ({
   );
 };
 
-export default TrajectoryDataTable;

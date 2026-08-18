@@ -4,7 +4,7 @@ import { Button } from "@blueprintjs/core";
 
 import { LogoIcon } from "@/utils/icons";
 import GeoMap from "@/pages/lbs/map";
-import { OpenLayersMap } from "@/pages/lbs/OpenLayersMap";
+import { OpenLayersMap } from "@/pages/common/OpenLayersMap";
 import { useL10n } from "@/l10n";
 import { LayoutResizer } from "@/utils";
 import { useHomeStore } from "./store";
@@ -74,7 +74,7 @@ export default function Home() {
                     <OpenLayersMap />
 
                     <Draggable handle=".bp6-panel-stack2-header" nodeRef={submenuContainerRef} bounds={{ left: 0, top: 0 }}>
-                        <div ref={submenuContainerRef} className="absolute" style={{ left: "1rem", top: "1rem", minWidth: "220px", zIndex: 10 }}>
+                        <div ref={submenuContainerRef} className="absolute" style={{ left: "1rem", top: "1rem", bottom: "2rem", minWidth: "220px", zIndex: 10 }}>
                             <MainMenuPanelStack />
                         </div>
                     </Draggable>

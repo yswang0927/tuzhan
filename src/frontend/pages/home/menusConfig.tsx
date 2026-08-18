@@ -1,6 +1,9 @@
+import React, { useMemo } from "react";
 import { useL10n } from "@/l10n";
 import { type PanelProps } from "@blueprintjs/core";
-import { useMemo } from "react";
+
+import { LocationQueryPanel, LastLocationPanel } from "./TrajectoryQueryCom";
+import { TrajectoryDataTable } from "@/pages/common/TrajectoryDataTable";
 
 export interface SubMenuConfig {
     id: string;
@@ -20,7 +23,7 @@ export interface MainMenuConfig {
 // Dummy generic panel
 export const GenericContentPanel = (props: PanelProps<{ id: string; title: string; content?: React.ReactNode }>) => {
     return (
-        <div className="p-4">
+        <div>
             <h4>{props.title} content...</h4>
             {props.content ? props.content : <p>This is the panel for {props.title}.</p>}
         </div>
@@ -41,9 +44,9 @@ export const useMenusConfig = (): MainMenuConfig[] => {
             name: t('轨迹查询'),
             icon: 'path-search',
             submenus: [
-                { id: 'person-location', name: t('人员轨迹定位'), icon: 'geolocation', panel: GenericContentPanel, footer: GenericFooter },
+                { id: 'person-location', name: t('人员轨迹定位'), icon: 'geolocation', panel: LocationQueryPanel, footer: TrajectoryDataTable },
                 { id: 'trajectory-tracking', name: t('轨迹回溯'), icon: 'history', panel: GenericContentPanel, footer: GenericFooter },
-                { id: 'last-position', name: t('最后一次位置'), icon: 'map-marker', panel: GenericContentPanel, footer: GenericFooter },
+                { id: 'last-position', name: t('最后一次位置'), icon: 'map-marker', panel: LastLocationPanel, footer: TrajectoryDataTable },
                 { id: 'my-footprints', name: t('我的足迹'), icon: 'walk', panel: GenericContentPanel, footer: GenericFooter },
             ]
         },

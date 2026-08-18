@@ -4,8 +4,9 @@ import View from 'ol/View.js';
 import Attribution from 'ol/control/Attribution.js';
 import { defaults as defaultControls } from 'ol/control/defaults.js';
 import { fromLonLat } from 'ol/proj.js';
-import 'ol/ol.css';
 import { apply } from 'ol-mapbox-style';
+
+import 'ol/ol.css';
 
 export function OpenLayersMap() {
     const mapDomRef = useRef<HTMLDivElement|null>(null);
@@ -31,6 +32,7 @@ export function OpenLayersMap() {
                 zoom: 1
             })
         });
+
         apply(map, styleJson);
     }, []);
 
