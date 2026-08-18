@@ -8,7 +8,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 public class CreateAsyncTaskRequest {
     private AsyncTaskType taskType;
     private JsonNode queryParams;
-    private Integer priority;          // 可选，默认 5
+    private Integer priority = 5;      // 可选，默认 5
+    private Integer maxRetries;        // 可选，默认 0（不重试）
     private Integer timeoutSeconds;    // 可选
 
     public AsyncTaskType getTaskType() {
@@ -33,6 +34,14 @@ public class CreateAsyncTaskRequest {
 
     public void setPriority(Integer priority) {
         this.priority = priority;
+    }
+
+    public Integer getMaxRetries() {
+        return maxRetries;
+    }
+
+    public void setMaxRetries(Integer maxRetries) {
+        this.maxRetries = maxRetries;
     }
 
     public Integer getTimeoutSeconds() {

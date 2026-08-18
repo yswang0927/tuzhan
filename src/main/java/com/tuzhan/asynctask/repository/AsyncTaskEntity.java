@@ -2,8 +2,6 @@ package com.tuzhan.asynctask.repository;
 
 import java.time.Instant;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.tuzhan.asynctask.AsyncTaskType;
 import com.tuzhan.asynctask.TaskStatus;
 
 /**
@@ -33,10 +31,10 @@ public class AsyncTaskEntity {
     private Instant startedAt;
     private Instant finishedAt;
 
-    private Integer retryCount;
-    private Integer maxRetries;
+    private Integer retryCount = 0;
+    private Integer maxRetries = 0;
     private Integer estimatedCost;
-    private Integer timeoutSeconds;
+    private Integer timeoutSeconds = 3600;
 
     public AsyncTaskEntity() {
         this.createdAt = Instant.now();

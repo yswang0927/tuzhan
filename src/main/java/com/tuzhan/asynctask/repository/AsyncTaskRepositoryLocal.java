@@ -19,8 +19,8 @@ public class AsyncTaskRepositoryLocal extends BaseRepository implements AsyncTas
         String sql = """
                 INSERT INTO async_task
                 (task_id, task_type, status, progress, priority, query_params,
-                 creator, created_at, updated_at, retry_count, estimated_cost, timeout_seconds)
-                VALUES(?,?,?,?,?,?,?,?,?,?,?,?);
+                 creator, created_at, updated_at, retry_count, max_retries, estimated_cost, timeout_seconds)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?);
                 """;
 
         Object[] params = {
@@ -34,6 +34,7 @@ public class AsyncTaskRepositoryLocal extends BaseRepository implements AsyncTas
                 task.getCreatedAt().getEpochSecond(),
                 task.getUpdatedAt().getEpochSecond(),
                 0,
+                task.getMaxRetries() != null ? task.getMaxRetries() : 0,
                 0,
                 task.getTimeoutSeconds()
         };
@@ -65,9 +66,14 @@ public class AsyncTaskRepositoryLocal extends BaseRepository implements AsyncTas
             return false;
         }
 
-        String sql = "update async_task set status = ?, started_at = ? where task_id = ?";
+        // 条件更新做原子抢占：只有仍处于 PENDING 的任务才能被本节点抢到，
+        // 影响行数=1 才代表抢占成功，避免多实例部署时重复捞取同一任务。
+        String sql = "update async_task set status = ?, started_at = ?, updated_at = ? where task_id = ? and status = ?";
         try {
-            return LOCAL_JDBC.executeUpdate(sql, new Object[]{ TaskStatus.RUNNING.name(), startedAt.getEpochSecond(), taskId }) > 0;
+            long now = startedAt.getEpochSecond();
+            return LOCAL_JDBC.executeUpdate(sql, new Object[]{
+                    TaskStatus.RUNNING.name(), now, now, taskId, TaskStatus.PENDING.name()
+            }) > 0;
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -79,13 +85,18 @@ public class AsyncTaskRepositoryLocal extends BaseRepository implements AsyncTas
             return false;
         }
 
-        String sql = "update async_task set progress = 100, status = ?, resultPath = ?, resultMeta = ?, finished_at = ? where task_id = ?";
+        // 仅当任务仍处于 RUNNING 时才落 SUCCESS，避免把已被取消(CANCELLED)
+        // 或已被看门狗改回的任务状态覆盖回去。
+        String sql = "update async_task set progress = 100, status = ?, result_path = ?, result_meta = ?, finished_at = ?, updated_at = ? where task_id = ? and status = ?";
+        long now = finishedAt.getEpochSecond();
         Object[] params = {
                 TaskStatus.SUCCESS.name(),
                 resultPath,
                 resultMeta,
-                finishedAt.getEpochSecond(),
-                taskId
+                now,
+                now,
+                taskId,
+                TaskStatus.RUNNING.name()
         };
 
         try {
@@ -101,12 +112,16 @@ public class AsyncTaskRepositoryLocal extends BaseRepository implements AsyncTas
             return false;
         }
 
-        String sql = "update async_task set status = ?, finished_at = ?, errorMsg = ? where task_id = ?";
+        // 同样加 RUNNING 守卫：已取消的任务即使执行线程抛异常，也不应被改成 FAILED。
+        String sql = "update async_task set status = ?, finished_at = ?, updated_at = ?, error_msg = ? where task_id = ? and status = ?";
+        long now = finishedAt.getEpochSecond();
         Object[] params = {
                 TaskStatus.FAILED.name(),
-                finishedAt.getEpochSecond(),
+                now,
+                now,
                 errorMsg,
-                taskId
+                taskId,
+                TaskStatus.RUNNING.name()
         };
 
         try {
@@ -122,7 +137,7 @@ public class AsyncTaskRepositoryLocal extends BaseRepository implements AsyncTas
             return false;
         }
 
-        String sql = "update async_task set status = ?, updated_at = ?, errorMsg = ? where task_id = ?";
+        String sql = "update async_task set status = ?, updated_at = ?, error_msg = ? where task_id = ?";
         Object[] params = {
                 status != null ? status.name() : null,
                 updatedAt.getEpochSecond(),
@@ -193,7 +208,8 @@ public class AsyncTaskRepositoryLocal extends BaseRepository implements AsyncTas
             limit = 1;
         }
 
-        String sql = "select * from async_task where status = ? order by created_at asc";
+        // priority 值越小优先级越高，同优先级按创建时间先到先得。
+        String sql = "select * from async_task where status = ? order by priority asc, created_at asc";
         try {
             return LOCAL_JDBC.queryForList(AsyncTaskEntity.class, sql, new Object[] { TaskStatus.PENDING.name() }, 1, limit);
         } catch (SQLException e) {
@@ -202,15 +218,18 @@ public class AsyncTaskRepositoryLocal extends BaseRepository implements AsyncTas
     }
 
     @Override
-    public List<AsyncTaskEntity> queryTimeoutTasks(Instant timeoutThreshold) {
-        if (timeoutThreshold == null) {
+    public List<AsyncTaskEntity> queryTimeoutTasks(Instant now) {
+        if (now == null) {
             return Collections.emptyList();
         }
 
-        String sql = "select * from async_task WHERE status = ? AND updated_at < ?";
+        // 基于任务实际开始时间(started_at)和其自带的 timeout_seconds 逐任务判定超时，
+        // 未设置 timeout_seconds 时按默认 3600 秒兜底。
+        String sql = "select * from async_task WHERE status = ? AND started_at IS NOT NULL "
+                + "AND started_at + COALESCE(timeout_seconds, 3600) < ?";
         Object[] params = {
                 TaskStatus.RUNNING.name(),
-                timeoutThreshold.getEpochSecond()
+                now.getEpochSecond()
         };
 
         try {
@@ -226,8 +245,14 @@ public class AsyncTaskRepositoryLocal extends BaseRepository implements AsyncTas
             return Collections.emptyList();
         }
 
-        String sql = "select * from async_task WHERE created_at < ?";
-        Object[] params = { expireThreshold.getEpochSecond() };
+        // 只清理已处于终态的任务，避免误删仍在排队(PENDING)或长时间运行(RUNNING)的任务。
+        String sql = "select * from async_task WHERE created_at < ? AND status IN (?, ?, ?)";
+        Object[] params = {
+                expireThreshold.getEpochSecond(),
+                TaskStatus.SUCCESS.name(),
+                TaskStatus.FAILED.name(),
+                TaskStatus.CANCELLED.name()
+        };
 
         try {
             return LOCAL_JDBC.queryForList(AsyncTaskEntity.class, sql, params);

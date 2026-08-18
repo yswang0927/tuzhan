@@ -9,7 +9,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import com.tuzhan.asynctask.handler.AsyncTaskHandler;
 import com.tuzhan.asynctask.repository.AsyncTaskEntity;
 import com.tuzhan.asynctask.repository.AsyncTaskRepository;
@@ -18,13 +17,16 @@ import com.tuzhan.asynctask.repository.AsyncTaskRepository;
 public class AsyncTaskServiceImpl implements AsyncTaskService {
 
     private final AsyncTaskRepository taskRepository;
+    private final AsyncTaskExecutor taskExecutor;
 
     // spring会自动扫描实现了AnalysisTaskHandler接口的类(@Component)
     private final Map<AsyncTaskType, AsyncTaskHandler> handlersMap;
 
     public AsyncTaskServiceImpl(AsyncTaskRepository taskRepository,
+                                AsyncTaskExecutor taskExecutor,
                                 List<AsyncTaskHandler> handlers) {
         this.taskRepository = taskRepository;
+        this.taskExecutor = taskExecutor;
         this.handlersMap = handlers.stream().collect(Collectors.toMap(AsyncTaskHandler::supportType, Function.identity()));
     }
 
@@ -62,6 +64,7 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
         taskEntity.setCreatedAt(Instant.now());
         taskEntity.setUpdatedAt(Instant.now());
         taskEntity.setRetryCount(0);
+        taskEntity.setMaxRetries(request.getMaxRetries() != null ? request.getMaxRetries() : 0);
         taskEntity.setTimeoutSeconds(request.getTimeoutSeconds() != null ? request.getTimeoutSeconds() : 3600);
 
         this.taskRepository.createTask(taskEntity);
@@ -80,18 +83,22 @@ public class AsyncTaskServiceImpl implements AsyncTaskService {
     }
 
     @Override
-    @Transactional
     public void cancelTask(String taskId) {
         Optional<AsyncTaskDetail> taskDetail = getTaskDetail(taskId);
         if (taskDetail.isEmpty()) {
-            throw new RuntimeException("任务不存在");
+            return;
         }
 
         if (taskDetail.get().getStatus() != TaskStatus.PENDING && taskDetail.get().getStatus() != TaskStatus.RUNNING) {
             throw new RuntimeException("当前状态不允许取消");
         }
 
+        // 先落 CANCELLED 状态：执行线程完成时的 updateSuccess/updateFailed 带 status=RUNNING 守卫，
+        // 状态已被改走后这些收尾更新不会再把 CANCELLED 覆盖回去。
         this.taskRepository.updateStatus(taskId, TaskStatus.CANCELLED, Instant.now(), "用户取消");
+
+        // 再中断本节点上正在执行的线程（协作式，依赖 handler 响应中断标志）。
+        this.taskExecutor.interruptRunning(taskId);
     }
 
 }
