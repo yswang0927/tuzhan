@@ -41,4 +41,11 @@ public class CommonController {
         return mv;
     }
 
+    @GetMapping(value={"/common/cert-required"})
+    public ModelAndView certRequired(HttpServletRequest request) {
+        ModelAndView mv = new ModelAndView("cert-required");
+        mv.addObject("contextPath", request.getContextPath());
+        return mv;
+    }
+
 }
