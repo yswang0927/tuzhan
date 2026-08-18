@@ -23,6 +23,8 @@
     "@blueprintjs/table": "^6.2.4",
     "@hookform/resolvers": "^5.7.1",
     "lucide-react": "^1.31.0",
+    "ol": "^10.10.0",
+    "ol-mapbox-style": "^13.4.2",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-draggable": "^4.7.1",
@@ -40,8 +42,5 @@
     "typescript": "^6.0.3",
     "vite": "^8.0.16",
     "vite-plugin-svgr": "^4.5.0"
-  },
-  "resolutions": {
-    "@popperjs/core": "2.10.0"
   }
 }

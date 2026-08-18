@@ -1,15 +1,15 @@
-import { useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import Draggable from "react-draggable";
 import { Button } from "@blueprintjs/core";
 
 import { LogoIcon } from "@/utils/icons";
 import GeoMap from "@/pages/lbs/map";
+import { OpenLayersMap } from "@/pages/lbs/OpenLayersMap";
 import { useL10n } from "@/l10n";
 import { LayoutResizer } from "@/utils";
 import { useHomeStore } from "./store";
 import { MainMenuPanelStack, BottomAreaContent } from "./SubMenus";
 import { useMenusConfig } from "./menusConfig";
-import React from "react";
 
 import "./style.css";
 
@@ -25,7 +25,7 @@ export default function Home() {
             return;
         }
         const layoutResizer = new LayoutResizer({
-            key: "resizer1", // 如果配置了,则可以自动记忆
+            key: "resizer2", // 如果配置了,则可以自动记忆
             trigger: resizerDomRef.current,
             target: resizerDomRef.current?.parentElement
         });
@@ -71,7 +71,7 @@ export default function Home() {
 
             <div className="map-app-main relative">
                 <div className="absolute inset-0">
-                    <GeoMap />
+                    <OpenLayersMap />
 
                     <Draggable handle=".bp6-panel-stack2-header" nodeRef={submenuContainerRef} bounds={{ left: 0, top: 0 }}>
                         <div ref={submenuContainerRef} className="absolute" style={{ left: "1rem", top: "1rem", minWidth: "220px", zIndex: 10 }}>

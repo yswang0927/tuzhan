@@ -1,5 +1,6 @@
 package com.tuzhan.asynctask;
 
+import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -83,7 +84,7 @@ public class AsyncTaskExecutor {
             }
 
             // 2. 执行核心逻辑
-            TaskExecuteResult execResult = handler.execute(task);
+            TaskExecuteResult execResult = handler.execute(task, queryParamsNode, Paths.get(this.resultDir));
 
             // 3. 保存结果
             this.taskRepository.updateSuccess(task.getTaskId(),

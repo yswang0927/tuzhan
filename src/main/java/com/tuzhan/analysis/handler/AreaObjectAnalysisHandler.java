@@ -1,5 +1,7 @@
 package com.tuzhan.analysis.handler;
 
+import java.nio.file.Path;
+
 import org.springframework.stereotype.Component;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.tuzhan.asynctask.AsyncTaskType;
@@ -24,7 +26,7 @@ public class AreaObjectAnalysisHandler implements AsyncTaskHandler {
     }
 
     @Override
-    public TaskExecuteResult execute(AsyncTaskEntity task) throws Exception {
+    public TaskExecuteResult execute(AsyncTaskEntity task, JsonNode queryParams, Path resultSaveDir) throws Exception {
         return null;
     }
 

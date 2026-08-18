@@ -1,5 +1,7 @@
 package com.tuzhan.asynctask.handler;
 
+import java.nio.file.Path;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.tuzhan.asynctask.AsyncTaskType;
 import com.tuzhan.asynctask.TaskExecuteResult;
@@ -24,9 +26,11 @@ public interface AsyncTaskHandler {
     /**
      * 执行分析逻辑
      *
-     * @param task 当前任务（可从中获取 taskId、queryParams 等）
+     * @param task 当前任务
+     * @param queryParams 查询参数
+     * @param resultSaveDir 结果保存的基础目录
      * @return 执行结果（路径 + 元数据）
      */
-    TaskExecuteResult execute(AsyncTaskEntity task) throws Exception;
+    TaskExecuteResult execute(AsyncTaskEntity task, JsonNode queryParams, Path resultSaveDir) throws Exception;
 
 }

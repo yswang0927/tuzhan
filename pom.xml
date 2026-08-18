@@ -107,6 +107,13 @@
 			<classifier>all</classifier>
 		</dependency>
 
+		<!-- 高精度多边形处理 -->
+		<dependency>
+			<groupId>org.locationtech.jts</groupId>
+			<artifactId>jts-core</artifactId>
+			<version>1.20.0</version>
+		</dependency>
+
 		<dependency>
 			<groupId>org.postgresql</groupId>
 			<artifactId>postgresql</artifactId>
