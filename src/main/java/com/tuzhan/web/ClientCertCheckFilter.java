@@ -5,6 +5,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -37,7 +38,13 @@ public class ClientCertCheckFilter extends OncePerRequestFilter {
             "/common/"
     };
 
-    private boolean isPublicPath(String path) {
+    @Value("${server.ssl.enabled:false}")
+    private boolean sslEnabled;
+
+    @Value("${server.ssl.client-auth:NONE}")
+    private String sslClientAuthMode;
+
+    private static boolean isPublicPath(String path) {
         for (String ignored : IGNORE_PATHS) {
             if (path.startsWith(ignored)) {
                 return true;
@@ -61,6 +68,11 @@ public class ClientCertCheckFilter extends OncePerRequestFilter {
         // 已登录过了
         HttpSession session = request.getSession(false);
         if (session != null && session.getAttribute(SESSION_USER_ID) != null) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        if (!sslEnabled || "NONE".equals(sslClientAuthMode)) {
             filterChain.doFilter(request, response);
             return;
         }
