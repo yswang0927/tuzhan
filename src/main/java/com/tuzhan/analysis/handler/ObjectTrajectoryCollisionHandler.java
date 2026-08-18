@@ -4,9 +4,6 @@ import java.io.BufferedWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -17,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.tuzhan.analysis.AnalysisUtils;
 import com.tuzhan.asynctask.AsyncTaskType;
 import com.tuzhan.asynctask.TaskExecuteResult;
 import com.tuzhan.asynctask.handler.AsyncTaskHandler;
@@ -39,29 +37,10 @@ import com.tuzhan.util.JsonObjectMapper;
  */
 @Component
 public class ObjectTrajectoryCollisionHandler extends BaseRepository implements AsyncTaskHandler {
-
     private static final Logger LOG = LoggerFactory.getLogger(ObjectTrajectoryCollisionHandler.class);
-
-    /** 时间字符串格式：兼容 "2026/08/01 10:20:00"。 */
-    private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
-
-    /** 时间字符串按此时区换算为绝对时间戳（秒）。 */
-    private static final ZoneId ZONE = ZoneId.of(JsonObjectMapper.DEFAULT_TIMEZONE);
-
-    /** 单个多边形至少需要的顶点数。 */
-    private static final int MIN_POLYGON_VERTICES = 3;
 
     /** 至少要圈选的区域数。 */
     private static final int MIN_AREAS = 2;
-
-    /**
-     * 单次碰撞查询的服务端最大执行时间（秒）。超时后由 ClickHouse 主动中断查询，
-     * 作为 Java 侧无法可靠设置 statement timeout 时的兜底，防止大查询拖垮集群。
-     */
-    private static final int MAX_EXECUTION_TIME_SECONDS = 60;
-
-    /** 单次查询使用的线程数上限，控制单查询对集群 CPU 的占用（0 表示不显式限制）。 */
-    private static final int MAX_THREADS = 8;
 
     @Override
     public AsyncTaskType supportType() {
@@ -86,8 +65,8 @@ public class ObjectTrajectoryCollisionHandler extends BaseRepository implements 
 
         for (int i = 0; i < areas.size(); i++) {
             JsonNode polygon = areas.get(i);
-            if (polygon == null || !polygon.isArray() || polygon.size() < MIN_POLYGON_VERTICES) {
-                throw new BadRequestException("区域[" + (i+1) + "] 至少需要 " + MIN_POLYGON_VERTICES + " 个顶点");
+            if (polygon == null || !polygon.isArray() || polygon.size() < AnalysisUtils.MIN_POLYGON_VERTICES) {
+                throw new BadRequestException("区域[" + (i+1) + "] 至少需要 " + AnalysisUtils.MIN_POLYGON_VERTICES + " 个顶点");
             }
             for (int p = 0; p < polygon.size(); p++) {
                 JsonNode point = polygon.get(p);
@@ -97,7 +76,7 @@ public class ObjectTrajectoryCollisionHandler extends BaseRepository implements 
                 }
             }
             // 时间段校验（同时得到 start<=end 的保证）
-            parseTimeRange(times.get(i), i);
+            AnalysisUtils.parseTimeRange(times.get(i), i);
         }
     }
 
@@ -127,15 +106,21 @@ public class ObjectTrajectoryCollisionHandler extends BaseRepository implements 
                 while (rs.next()) {
                     String idfa = rs.getString("idfa_md5");
                     int matchedAreaCount = rs.getInt("matchedAreaCount");
-                    long totalOverlapSeconds = rs.getLong("totalOverlapSeconds");
+                    long overlapSeconds = rs.getLong("overlapSeconds");
+                    long overlapStart = rs.getLong("overlapStart");
+                    long overlapEnd = rs.getLong("overlapEnd");
+                    boolean overlapped = overlapSeconds > 0;
                     // segments: groupArray((area_idx, area_first, area_last, pointCount))
                     // ClickHouse JDBC 返回为数组，逐元素解析
                     List<Map<String, Object>> segments = parseSegments(rs.getObject("segments"), hitAreaCounters);
 
-                    Map<String, Object> row = new LinkedHashMap<>(4);
-                    row.put("idfaMd5", idfa);
+                    Map<String, Object> row = new LinkedHashMap<>(6);
+                    row.put("objectId", idfa);
                     row.put("matchedAreaCount", matchedAreaCount);
-                    row.put("totalOverlapSeconds", totalOverlapSeconds);
+                    row.put("overlapSeconds", overlapSeconds);
+                    // 仅在各区域时间窗真正相交时才输出重叠区间，否则为 null 避免误读。
+                    row.put("overlapStart", overlapped ? overlapStart : null);
+                    row.put("overlapEnd", overlapped ? overlapEnd : null);
                     row.put("segments", segments);
 
                     try {
@@ -175,10 +160,10 @@ public class ObjectTrajectoryCollisionHandler extends BaseRepository implements 
     private String buildCollisionSql(JsonNode areas, JsonNode times) {
         StringBuilder inner = new StringBuilder();
         for (int i = 0; i < areas.size(); i++) {
-            long[] range = parseTimeRange(times.get(i), i);
+            long[] range = AnalysisUtils.parseTimeRange(times.get(i), i);
             JsonNode polygonNode = areas.get(i);
-            String polygon = buildPolygonLiteral(polygonNode);
-            double[] bbox = boundingBox(polygonNode); // [minLon, minLat, maxLon, maxLat]
+            String polygon = AnalysisUtils.buildPolygonLiteral(polygonNode);
+            double[] bbox = AnalysisUtils.boundingBox(polygonNode); // [minLon, minLat, maxLon, maxLat]
 
             if (i > 0) {
                 inner.append(" UNION ALL ");
@@ -195,92 +180,20 @@ public class ObjectTrajectoryCollisionHandler extends BaseRepository implements 
                  .append("GROUP BY idfa_md5");
         }
 
-        String settings = buildSettings();
+        String settings = AnalysisUtils.buildClickHouseSettings();
+        // 轨迹重叠时长 = 各命中区域时间窗口 [area_first, area_last] 的交集长度：
+        //   overlap = min(area_last) - max(area_first)，若时间窗互不相交则为 0（greatest 兜底）。
         return "SELECT idfa_md5, "
                 + "countDistinct(area_idx) AS matchedAreaCount, "
-                + "sum(area_last - area_first) AS totalOverlapSeconds, "
+                + "greatest(min(area_last) - max(area_first), 0) AS overlapSeconds, "
+                + "max(area_first) AS overlapStart, "
+                + "min(area_last) AS overlapEnd, "
                 + "groupArray((area_idx, area_first, area_last, point_count)) AS segments "
                 + "FROM (" + inner + ") "
                 + "GROUP BY idfa_md5 "
                 + "HAVING matchedAreaCount >= " + MIN_AREAS + " "
-                + "ORDER BY matchedAreaCount DESC, totalOverlapSeconds DESC"
+                + "ORDER BY matchedAreaCount DESC, overlapSeconds DESC"
                 + settings;
-    }
-
-    /**
-     * 服务端限流/超时兜底：max_execution_time 让 ClickHouse 到点主动中断查询，
-     * max_threads 控制单查询 CPU 占用，避免大查询拖垮集群。
-     */
-    private String buildSettings() {
-        StringBuilder sb = new StringBuilder(" SETTINGS max_execution_time = ").append(MAX_EXECUTION_TIME_SECONDS);
-        if (MAX_THREADS > 0) {
-            sb.append(", max_threads = ").append(MAX_THREADS);
-        }
-        return sb.toString();
-    }
-
-    /**
-     * 计算多边形外接矩形（bounding box），用于下推的 lon/lat 范围预过滤。
-     * 返回 [minLon, minLat, maxLon, maxLat]。
-     */
-    private double[] boundingBox(JsonNode polygon) {
-        double minLon = Double.POSITIVE_INFINITY;
-        double minLat = Double.POSITIVE_INFINITY;
-        double maxLon = Double.NEGATIVE_INFINITY;
-        double maxLat = Double.NEGATIVE_INFINITY;
-        for (int p = 0; p < polygon.size(); p++) {
-            JsonNode point = polygon.get(p);
-            double lon = point.get(0).asDouble();
-            double lat = point.get(1).asDouble();
-            if (lon < minLon) minLon = lon;
-            if (lon > maxLon) maxLon = lon;
-            if (lat < minLat) minLat = lat;
-            if (lat > maxLat) maxLat = lat;
-        }
-        return new double[]{minLon, minLat, maxLon, maxLat};
-    }
-
-    /**
-     * 把一个多边形的顶点数组转成 ClickHouse 数组字面量：[(lon,lat),(lon,lat),...]。
-     */
-    private String buildPolygonLiteral(JsonNode polygon) {
-        StringBuilder sb = new StringBuilder("[");
-        for (int p = 0; p < polygon.size(); p++) {
-            JsonNode point = polygon.get(p);
-            if (p > 0) {
-                sb.append(',');
-            }
-            sb.append('(').append(point.get(0).asDouble()).append(',').append(point.get(1).asDouble()).append(')');
-        }
-        return sb.append(']').toString();
-    }
-
-    /**
-     * 解析一个 ["start","end"] 时间段为 [startEpochSec, endEpochSec]，并保证 start<=end。
-     */
-    private long[] parseTimeRange(JsonNode range, int areaIndex) {
-        if (range == null || !range.isArray() || range.size() < 2) {
-            throw new BadRequestException("区域[" + areaIndex + "] 的时间段必须是 [start, end]");
-        }
-        long start = parseEpochSecond(range.get(0), areaIndex);
-        long end = parseEpochSecond(range.get(1), areaIndex);
-        if (start > end) {
-            long tmp = start;
-            start = end;
-            end = tmp;
-        }
-        return new long[]{start, end};
-    }
-
-    private long parseEpochSecond(JsonNode timeNode, int areaIndex) {
-        if (timeNode == null || !timeNode.isTextual()) {
-            throw new BadRequestException("区域[" + areaIndex + "] 的时间必须是文本，格式 yyyy/MM/dd HH:mm:ss");
-        }
-        try {
-            return LocalDateTime.parse(timeNode.asText().trim(), TIME_FMT).atZone(ZONE).toEpochSecond();
-        } catch (Exception e) {
-            throw new BadRequestException("区域[" + areaIndex + "] 的时间无法解析: " + timeNode.asText());
-        }
     }
 
     /**
@@ -294,13 +207,13 @@ public class ObjectTrajectoryCollisionHandler extends BaseRepository implements 
             return result;
         }
 
-        Object[] rows = toObjectArray(segmentsObj);
+        Object[] rows = AnalysisUtils.toObjectArray(segmentsObj);
         if (rows == null) {
             return result;
         }
 
         for (Object rowObj : rows) {
-            Object[] tuple = toObjectArray(rowObj);
+            Object[] tuple = AnalysisUtils.toObjectArray(rowObj);
             if (tuple == null || tuple.length < 4) {
                 continue;
             }
@@ -324,27 +237,5 @@ public class ObjectTrajectoryCollisionHandler extends BaseRepository implements 
         return result;
     }
 
-    /**
-     * 把 ClickHouse JDBC 返回的数组/tuple 统一转成 Object[]。可能是 Object[] 或 java.sql.Array。
-     */
-    private Object[] toObjectArray(Object obj) {
-        if (obj == null) {
-            return null;
-        }
-        if (obj instanceof Object[]) {
-            return (Object[]) obj;
-        }
-        if (obj instanceof java.sql.Array) {
-            try {
-                Object arr = ((java.sql.Array) obj).getArray();
-                if (arr instanceof Object[]) {
-                    return (Object[]) arr;
-                }
-            } catch (Exception e) {
-                LOG.warn("Failed to unwrap java.sql.Array: {}", e.getMessage());
-            }
-        }
-        return null;
-    }
 
 }
