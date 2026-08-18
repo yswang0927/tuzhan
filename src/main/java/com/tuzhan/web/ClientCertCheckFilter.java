@@ -58,9 +58,15 @@ public class ClientCertCheckFilter extends OncePerRequestFilter {
             return;
         }
 
+        // 已登录过了
+        HttpSession session = request.getSession(false);
+        if (session != null && session.getAttribute(SESSION_USER_ID) != null) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         // 2. 获取客户端证书
         X509Certificate[] certs = (X509Certificate[]) request.getAttribute(CERT_ATTR);
-
         if (certs == null || certs.length == 0) {
             // 没有证书 → 跳转提示页
             response.sendRedirect("/common/cert-required");
@@ -75,8 +81,9 @@ public class ClientCertCheckFilter extends OncePerRequestFilter {
         }
 
         // 4. 存入 Session
-        HttpSession session = request.getSession(true);
+        session = request.getSession(true);
         session.setAttribute(SESSION_USER_ID, cn.trim());
+        System.out.println(">>>当前登录用户：" + cn);
 
         // 5. 继续后续处理
         filterChain.doFilter(request, response);
