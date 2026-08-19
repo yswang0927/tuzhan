@@ -3,6 +3,25 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 const BASE_API_URL = (window as any).BASE_URL || 'http://127.0.0.1:9090';
 
 /**
+ * HTTP / 业务请求错误。
+ * - statusCode: HTTP 状态码；业务错误（HTTP 200 但 code !== 0）时为 undefined。
+ * - code: 后端返回的业务错误码（如有）。
+ */
+export class HttpError extends Error {
+    readonly statusCode?: number;
+    readonly code?: number;
+
+    constructor(message: string, options?: { statusCode?: number; code?: number }) {
+        super(message);
+        this.name = 'HttpError';
+        this.statusCode = options?.statusCode;
+        this.code = options?.code;
+        // 修正继承内置类时的原型链，保证 instanceof 生效
+        Object.setPrototypeOf(this, HttpError.prototype);
+    }
+}
+
+/**
  * get 请求封装，直接返回后端data字段
  * @param {string} url
  * @param {Object} [params] query参数对象
@@ -31,16 +50,16 @@ export async function getJson<T = any>(
         if(res.status === 401){
             // 跳登录页
             location.href = '/login';
-            throw new Error('HTTP 401');
+            throw new HttpError('HTTP 401 Unauthorized', { statusCode: 401 });
         }
-        throw new Error(`HTTP ${res.status}`);
+        throw new HttpError(`HTTP ${res.status}`, { statusCode: res.status });
     }
 
     const json = await res.json();
     // 业务code判断：code !==0 业务失败
     if (json.code !== 0) {
         // 把后端message抛出，上层catch捕获
-        throw new Error(json.message || '业务请求失败');
+        throw new HttpError(json.message || '业务请求失败', { code: json.code });
     }
 
     return json.data;
@@ -63,17 +82,64 @@ export async function postJson<T = any>(
         if(res.status === 401){
             // 跳登录页
             location.href = '/login';
-            throw new Error('HTTP 401');
+            throw new HttpError('HTTP 401 Unauthorized', { statusCode: 401 });
         }
-        throw new Error(`HTTP ${res.status}`);
+        throw new HttpError(`HTTP ${res.status}`, { statusCode: res.status });
     }
 
     const json = await res.json();
     if (json.code !== 0) {
-        throw new Error(json.message || '业务请求失败');
+        throw new HttpError(json.message || '业务请求失败', { code: json.code });
     }
 
     return json.data;
+}
+
+/**
+ * ============ useFetch() ============
+ * 用法：
+ * const {data, loading, error} = useFetch('/api/xxx');
+ *
+ * 手动触发：
+ * const {data, loading, error, run} = useFetch('/api/xxx', {immediate:false});
+ * <button onClick={run} disabled={loading}>
+ *  {loading ? 'Loading' : 'Edit'}
+ * </button>
+ *
+ * 轮寻：
+ * const { data, run, abort } = useFetch('/api/xxx', {
+ *  pollingInterval: 3000
+ * });
+ *
+ * 防抖：
+ * const { data, run, abort } = useFetch('/api/xxx', {
+ *  debounceInterval: 300
+ * });
+ *
+ * 节流：
+ * const { data, run, abort } = useFetch('/api/xxx', {
+ *  throttleInterval: 300
+ * });
+ *
+ * 错误重试：
+ * const { data, run, abort } = useFetch('/api/xxx', {
+ *  retryCount: 3,
+ *  retryInterval: 1000,
+ *  maxRetryInterval: 10000
+ * });
+ *
+ * SSE监听：
+ * const {loading} = useFetch('/api/xxx', {
+ *   onSSE: (event: SSEEvent) => {}
+ * });
+ */
+
+export interface FetchSSEOptions {
+    method?: 'GET' | 'POST';
+    params?: Record<string, any>;
+    body?: Record<string, any>;
+    signal?: AbortSignal;
+    onEvent: (event: SSEEvent) => void;
 }
 
 /**
@@ -138,13 +204,7 @@ function parseSSEFrame(frame: string): SSEEvent | null {
  */
 export async function fetchSSE(
     url: string,
-    options: {
-        method?: 'GET' | 'POST';
-        params?: Record<string, any>;
-        body?: Record<string, any>;
-        signal?: AbortSignal;
-        onEvent: (event: SSEEvent) => void;
-    }
+    options: FetchSSEOptions
 ): Promise<void> {
     const { method = 'GET', params, body, signal, onEvent } = options;
 
@@ -170,7 +230,7 @@ export async function fetchSSE(
             location.href = '/login';
             throw new Error('HTTP 401');
         }
-        throw new Error(`HTTP ${res.status}`);
+        throw new HttpError(`HTTP ${res.status}`, { statusCode: res.status });
     }
 
     if (!res.body) {
@@ -231,39 +291,6 @@ function safeCall(fn: ((...args: any[]) => void) | undefined, ...args: any[]) {
     }
 }
 
-/**
- * ============ useFetch() ============
- * 用法：
- * const {data, loading, error} = useFetch('/api/xxx');
- * 
- * 手动触发：
- * const {data, loading, error, run} = useFetch('/api/xxx', {immediate:false});
- * <button onClick={run} disabled={loading}>
- *  {loading ? 'Loading' : 'Edit'}
- * </button>
- * 
- * 轮寻：
- * const { data, run, abort } = useFetch('/api/xxx', { 
- *  pollingInterval: 3000
- * });
- * 
- * 防抖：
- * const { data, run, abort } = useFetch('/api/xxx', { 
- *  debounceInterval: 300
- * });
- * 
- * 节流：
- * const { data, run, abort } = useFetch('/api/xxx', { 
- *  throttleInterval: 300
- * });
- * 
- * 错误重试：
- * const { data, run, abort } = useFetch('/api/xxx', { 
- *  retryCount: 3,
- *  retryInterval: 1000,
- *  maxRetryInterval: 10000
- * });
- */
 export interface UseFetchOptions<T = any> {
     method?: 'GET' | 'POST';
     params?: Record<string, any>;
@@ -326,6 +353,8 @@ export function useFetch<T = any>(
     const throttleTimerRef = useRef<number | null>(null);
     const retryTimerRef = useRef<number | null>(null);
     const isThrottledRef = useRef<boolean>(false);
+    // 组件挂载标记：卸载后阻止一切 setState 与回调，避免内存泄漏与无效状态更新
+    const isMountedRef = useRef<boolean>(true);
 
     const clearTimers = useCallback(() => {
         if (pollingTimerRef.current) clearTimeout(pollingTimerRef.current);
@@ -340,6 +369,11 @@ export function useFetch<T = any>(
             overrideParams?: Record<string, any>,
             currentRetry = 0
         ): Promise<T | undefined> => {
+            // 组件已卸载则不再发起请求
+            if (!isMountedRef.current) {
+                return;
+            }
+
             if (abortControllerRef.current) {
                 abortControllerRef.current.abort();
             }
@@ -386,20 +420,22 @@ export function useFetch<T = any>(
             try {
                 // SSE 流式分支：设置了 onSSE 则走流式读取，逐条推送
                 if (typeof onSSE === 'function') {
-                    await fetchSSE(url, {
-                        method,
+                    const sseOptions: FetchSSEOptions = {
+                        method: (method === 'POST' ? 'POST' : 'GET'),
                         params: method === 'GET' ? requestParams : undefined,
                         body: method === 'POST' ? requestParams : undefined,
                         signal: controller.signal,
-                        onEvent: (evt) => {
-                            if (controller.signal.aborted) {
+                        onEvent: (evt: SSEEvent) => {
+                            if (controller.signal.aborted || !isMountedRef.current) {
                                 return;
                             }
                             safeCall(onSSE, evt);
                         },
-                    });
+                    };
 
-                    if (controller.signal.aborted) {
+                    await fetchSSE(url, sseOptions);
+
+                    if (controller.signal.aborted || !isMountedRef.current) {
                         return;
                     }
 
@@ -424,7 +460,7 @@ export function useFetch<T = any>(
                         ? await getJson<T>(url, requestParams, controller.signal)
                         : await postJson<T>(url, requestParams, controller.signal);
 
-                if (controller.signal.aborted) {
+                if (controller.signal.aborted || !isMountedRef.current) {
                     return;
                 }
 
@@ -446,15 +482,22 @@ export function useFetch<T = any>(
                 return result;
 
             } catch (err: any) {
-                if ((typeof err === 'object' && err.name === 'AbortError') 
-                    || controller.signal.aborted) {
+                if ((typeof err === 'object' && err.name === 'AbortError')
+                    || controller.signal.aborted
+                    || !isMountedRef.current) {
                     return;
                 }
 
                 const errorObj = err instanceof Error ? err : new Error(String(err));
 
+                // 4xx 客户端错误（如 400/403/404）重试也不会成功，直接失败；
+                // 仅对网络错误和 5xx 服务端错误进行重试。
+                const statusCode = errorObj instanceof HttpError ? errorObj.statusCode : undefined;
+                const isBusinessError = errorObj instanceof HttpError && errorObj.code !== undefined;
+                const isRetriable = retryCount > 0 && !isBusinessError && (statusCode === undefined || statusCode >= 500);
+
                 // 触发重试逻辑
-                if (currentRetry < retryCount) {
+                if (isRetriable && currentRetry < retryCount) {
                     // 1. 指数退避: base * 2^(currentRetry)
                     let delay = retryBackoff
                         ? retryInterval * Math.pow(2, currentRetry)
@@ -469,10 +512,16 @@ export function useFetch<T = any>(
                     }
 
                     retryTimerRef.current = setTimeout(() => {
-                        executeCore(overrideParams, currentRetry + 1);
+                        if (isMountedRef.current) {
+                            executeCore(overrideParams, currentRetry + 1);
+                        }
                     }, delay);
                 } else {
-                    // 重试次数用尽
+                    // 重试次数用尽或不可重试的错误
+                    if (!isMountedRef.current) {
+                        return;
+                    }
+
                     setError(errorObj);
                     setLoading(false);
 
@@ -529,6 +578,14 @@ export function useFetch<T = any>(
         [executeCore]
     );
 
+    // 挂载/卸载生命周期：仅在真正卸载时置为 false，避免受其它 effect 重跑影响
+    useEffect(() => {
+        isMountedRef.current = true;
+        return () => {
+            isMountedRef.current = false;
+        };
+    }, []);
+
     // 挂载执行
     useEffect(() => {
         if (immediate) {
@@ -566,8 +623,13 @@ export function useFetch<T = any>(
 
     const abort = useCallback(() => {
         clearTimers();
-        abortControllerRef.current?.abort();
-        setLoading(false);
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+        }
+        if (isMountedRef.current) {
+            setLoading(false);
+        }
     }, [clearTimers]);
 
     return {
