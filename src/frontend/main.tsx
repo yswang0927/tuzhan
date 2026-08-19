@@ -1,5 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { HotkeysProvider } from "@blueprintjs/core";
 import App from './App';
 import { L10nProvider } from "@/l10n";
 import { initTheme } from '@/utils/theme';
@@ -15,7 +16,9 @@ initTheme();
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <L10nProvider>
+      <HotkeysProvider>
       <App />
+      </HotkeysProvider>
     </L10nProvider>
   </React.StrictMode>
 )

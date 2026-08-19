@@ -1,9 +1,5 @@
 package com.tuzhan.web.trajectory;
 
-import java.time.Instant;
-
-import com.gdk.jdbc.annotation.Column;
-
 /**
  * 轨迹
  */
@@ -11,8 +7,7 @@ public class TrajectoryPoint {
     // 目标对象ID
     private String objectId;
     // 事件发生的时间点
-    @Column(setter = "setEventTimeOfEpochSecond")
-    private Instant eventTime;
+    private long eventTime;
     // 经度
     private double lon;
     // 纬度
@@ -26,16 +21,12 @@ public class TrajectoryPoint {
         this.objectId = objectId;
     }
 
-    public Instant getEventTime() {
+    public long getEventTime() {
         return eventTime;
     }
 
-    public void setEventTime(Instant eventTime) {
+    public void setEventTime(long eventTime) {
         this.eventTime = eventTime;
-    }
-
-    public void setEventTimeOfEpochSecond(long eventTime) {
-        this.eventTime = Instant.ofEpochSecond(eventTime);
     }
 
     public double getLon() {

@@ -8,8 +8,7 @@ import {
 } from "@blueprintjs/core";
 import { type ItemRenderer, Suggest } from "@blueprintjs/select";
 
-import { getJson } from "@/utils/api";
-import { debounce } from "@/utils";
+import { useFetch } from "@/utils/api";
 import { useL10n } from "@/l10n";
 
 export interface OptionItem {
@@ -25,8 +24,19 @@ export interface ObjectSuggestProps {
 export function ObjectSuggest({ onSelected, defaultValue = '' }: ObjectSuggestProps) {
     const { t } = useL10n();
     const [items, setItems] = useState<OptionItem[]>([]);
-    const [loading, setLoading] = useState<boolean>(false);
-    const [selectedItem, setSelectedItem] = useState<OptionItem | null>(defaultValue ? {id: defaultValue, name: defaultValue} : null);
+    const [selectedItem, setSelectedItem] = useState<OptionItem | null>(defaultValue ? { id: defaultValue, name: defaultValue } : null);
+
+    const { data, loading, run, abort } = useFetch(`/api/trajectory/objects`, {
+        method: 'GET',
+        immediate: false,
+        debounceInterval: 350
+    });
+
+    useEffect(() => {
+        if (!loading && data) {
+            setItems(data.map((objId: string) => ({ id: objId, name: objId })));
+        }
+    }, [data, loading]);
 
     const renderItem: ItemRenderer<OptionItem> = useCallback((item, rendererProps) => {
         if (!rendererProps.modifiers.matchesPredicate) {
@@ -49,30 +59,9 @@ export function ObjectSuggest({ onSelected, defaultValue = '' }: ObjectSuggestPr
         onSelected?.(selectItem?.name || '');
     };
 
-    const fetchOptions = useCallback((queryStr: string = "") => {
-        setLoading(true);
-
-        getJson(`/api/trajectory/objects`, {obj: queryStr})
-            .then(data => {
-                if (Array.isArray(data)) {
-                    setItems(data.map(objId => {return {id: objId, name: objId}}));
-                }
-            })
-            .catch(err => {
-                // TODO Toast提示
-            }).finally(() => {
-               setLoading(false);
-            });
-    }, []);
-
-    const queryFetchOptions = useRef(debounce(function(text: string) {
-        fetchOptions(text);
-    }, 300));
-
     useEffect(() => {
-        // 组件卸载取消防抖，防止内存泄漏
         return () => {
-            queryFetchOptions.current.cancel();
+            abort();
         };
     }, []);
 
@@ -80,7 +69,7 @@ export function ObjectSuggest({ onSelected, defaultValue = '' }: ObjectSuggestPr
         <Suggest<OptionItem>
             closeOnSelect={true}
             fill={true}
-            inputProps={{placeholder: t('搜索选择对象')}}
+            inputProps={{ placeholder: t('搜索选择对象') }}
             items={items}
             itemRenderer={renderItem}
             inputValueRenderer={(item: OptionItem) => (item.name || '')}
@@ -94,13 +83,13 @@ export function ObjectSuggest({ onSelected, defaultValue = '' }: ObjectSuggestPr
                 onOpening: () => {
                     // 仅当目前列表为空时才在聚焦展开时自动加载
                     if (items.length === 0) {
-                        fetchOptions();
+                        run();
                     }
                 }
             }}
             // 2. 监听输入框打字，实时搜索
             onQueryChange={(query) => {
-                queryFetchOptions.current(query);
+                run({ "obj": query });
             }}
             noResults={
                 loading ? (

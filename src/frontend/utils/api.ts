@@ -544,7 +544,6 @@ export function useFetch<T = any>(
     const execute = useCallback(
         (overrideParams?: Record<string, any>): Promise<T | undefined> => {
             const { debounceInterval, throttleInterval } = optionsRef.current;
-
             if (debounceInterval && debounceInterval > 0) {
                 return new Promise((resolve) => {
                     if (debounceTimerRef.current) {

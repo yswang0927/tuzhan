@@ -1,5 +1,6 @@
 import { v4 as uuid4 } from 'uuid';
 import { OverlayToaster, Position } from "@blueprintjs/core";
+import { format } from "date-fns";
 
 export const uuid = (len: number = 0) => {
   let val = uuid4();
@@ -8,6 +9,18 @@ export const uuid = (len: number = 0) => {
     val = val.substring(0, Math.min(len, val.length));
   }
   return val;
+};
+
+/**
+ * 格式化日期时间戳秒数
+ * @param date 日期对象或时间戳秒数
+ * @param fmt 日期字符串格式，默认：yyyy/MM/dd HH:mm:ss
+ */
+export const formatDate = (date: Date | number, fmt?: string): string => {
+    if (date === null) {
+      return "";
+    }
+    return format(date instanceof Number ? new Date(date) : date, fmt ? fmt : 'yyyy/MM/dd HH:mm:ss');
 };
 
 /**

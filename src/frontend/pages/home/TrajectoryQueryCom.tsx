@@ -8,10 +8,10 @@ import {
 import { DateRangeInput, TimePrecision } from "@blueprintjs/datetime";
 import { zhCN, zhTW, enUS } from "date-fns/locale";
 import { useForm, Controller } from "react-hook-form";
-import { format } from 'date-fns';
 import { toast } from 'sonner';
 
-import { getJson } from "@/utils/api";
+import { formatDate } from "@/utils";
+import { getJson, useFetch } from "@/utils/api";
 import { useL10n } from "@/l10n";
 
 import { ObjectSuggest } from "@/pages/common/ObjectSuggest";
@@ -61,8 +61,8 @@ export const LocationQueryPanel: React.FC<PanelProps<PanelEmptyProps>> = (props)
         setTableLoading(true);
         getJson('/api/trajectory/query-trajectories', {
             ...formData,
-            startTime: formData.startTime ? format(formData.startTime, 'yyyy-MM-dd HH:mm:ss') : '',
-            endTime: formData.endTime ? format(formData.endTime, 'yyyy-MM-dd HH:mm:ss') : '',
+            startTime: formData.startTime ? formatDate(formData.startTime) : '',
+            endTime: formData.endTime ? formatDate(formData.endTime) : '',
         })
             .then(data => {
                 console.log(">>> data: ", data);
@@ -72,7 +72,7 @@ export const LocationQueryPanel: React.FC<PanelProps<PanelEmptyProps>> = (props)
                 // 2. 调用地图 API 绘制轨迹(命令式，不订阅，避免多余重渲染)
                 const mapApi = useHomeStore.getState().mapApi;
                 mapApi?.drawLines(list, { lineColor: "#1890ff", showDirection: true });
-                //mapApi?.focusLine(list);
+                mapApi?.focusLine(list);
             })
             .catch(err => {
                 console.error(">>> err: ", err);
@@ -148,40 +148,49 @@ export const LocationQueryPanel: React.FC<PanelProps<PanelEmptyProps>> = (props)
  */
 export const LastLocationPanel: React.FC<PanelProps<PanelEmptyProps>> = (props) => {
     const { t } = useL10n();
-    const setTrajectoryData = useHomeStore(state => state.setTrajectoryData);
-    const setTableLoading = useHomeStore(state => state.setTableLoading);
     const { handleSubmit, control, formState: { errors } } = useForm({
         defaultValues: {
             objectId: null as string | null,
         }
     });
 
-    const [querying, setQuerying] = useState(false);
+    const setTrajectoryData = useHomeStore(state => state.setTrajectoryData);
+    const setTableLoading = useHomeStore(state => state.setTableLoading);
 
-    const doQuery = (formData: any) => {
+    const {data, loading, run, abort} = useFetch('/api/trajectory/query-lastlocation', {
+        immediate: false
+    });
+
+    const doQuery = useCallback((formData: any) => {
         console.log(">>> formData: ", formData);
-        setQuerying(true);
+        setTrajectoryData([]);
         setTableLoading(true);
-        getJson('/api/trajectory/query-lastlocation', formData)
-            .then(data => {
-                console.log(">>> data: ", data);
-                const list = Array.isArray(data) ? data : data ? [data] : [];
-                setTrajectoryData(list);
-                const mapApi = useHomeStore.getState().mapApi;
-                if (list[0]) {
-                    mapApi?.drawPoint(list[0]);
-                    //mapApi?.focusPoint(list[0]);
-                }
-            })
-            .catch(err => {
-                console.error(">>> err: ", err);
-                setTrajectoryData([]);
-            })
-            .finally(() => {
-                setQuerying(false);
-                setTableLoading(false);
-            });
-    };
+
+        run({"objectId": formData.objectId});
+        
+    }, [run, setTrajectoryData, setTableLoading]);
+
+    useEffect(() => {
+        if (!loading && data) {
+            console.log(">>> data: ", data);
+            const list = Array.isArray(data) ? data : data ? [data] : [];
+            setTrajectoryData(list);
+            setTableLoading(false);
+
+            const mapApi = useHomeStore.getState().mapApi;
+            mapApi?.clearAll();
+            if (list[0]) {
+                mapApi?.drawPoint(list[0]);
+                mapApi?.focusPoint(list[0]);
+            }
+        }
+    }, [data, loading]);
+
+    useEffect(() => {
+        return () => {
+            abort();
+        };
+    }, []);
 
     return (
         <div style={{ padding: '0.5rem 1rem' }}>
@@ -208,7 +217,7 @@ export const LastLocationPanel: React.FC<PanelProps<PanelEmptyProps>> = (props) 
                         text={t('查询')}
                         intent="primary"
                         fill={true}
-                        loading={querying}
+                        loading={loading}
                     />
                 </div>
             </form>

@@ -12,7 +12,7 @@ import {
 } from "@blueprintjs/table";
 
 import { useL10n } from "@/l10n";
-import { copyToClipboard } from "@/utils";
+import { formatDate, copyToClipboard } from "@/utils";
 import type { TrajectoryData } from "./types";
 
 import "@blueprintjs/table/lib/css/table.css";
@@ -68,7 +68,7 @@ export const TrajectoryDataTable: React.FC<TrajectoryDataTableProps> = ({
       case 0:
         return rowData.objectId || "";
       case 1:
-        return rowData.eventTime || "";
+        return formatDate(rowData.eventTime) || "";
       case 2:
         return rowData.lon !== undefined ? rowData.lon.toFixed(6) : "";
       case 3:
@@ -98,7 +98,7 @@ export const TrajectoryDataTable: React.FC<TrajectoryDataTableProps> = ({
     if (rowIndex != null && rowIndex >= 0 && rowIndex < data.length) {
       const rowData = data[rowIndex];
       if (rowData) {
-        const timeStr = rowData.eventTime || "";
+        const timeStr = formatDate(rowData.eventTime) || "";
         const lonStr = rowData.lon !== undefined ? rowData.lon.toFixed(6) : "";
         const latStr = rowData.lat !== undefined ? rowData.lat.toFixed(6) : "";
         const rowText = [rowData.objectId || "", timeStr, lonStr, latStr].join("\t");
@@ -131,7 +131,7 @@ export const TrajectoryDataTable: React.FC<TrajectoryDataTableProps> = ({
   };
 
   // 渲染 Object 列
-  const renderIdfaCell = (rowIndex: number) => {
+  const renderObjectCell = (rowIndex: number) => {
     const rowData = data[rowIndex];
     return renderCell(rowData?.objectId || "-", rowData?.objectId);
   };
@@ -143,7 +143,7 @@ export const TrajectoryDataTable: React.FC<TrajectoryDataTableProps> = ({
       return renderCell("-");
     }
     try {
-      const formattedTime = new Date(rowData.eventTime).toLocaleString();
+      const formattedTime = formatDate(rowData.eventTime);
       return renderCell(formattedTime, formattedTime);
     } catch (e) {
       return renderCell(String(rowData.eventTime));
@@ -185,7 +185,7 @@ export const TrajectoryDataTable: React.FC<TrajectoryDataTableProps> = ({
         enableColumnResizing={true}
         bodyContextMenuRenderer={renderBodyContextMenu}
       >
-        <Column name={t("账号/ID")} cellRenderer={renderIdfaCell} />
+        <Column name={t("账号/ID")} cellRenderer={renderObjectCell} />
         <Column name={t("时间")} cellRenderer={renderTimeCell} />
         <Column name={t("经度")} cellRenderer={renderLonCell} />
         <Column name={t("纬度")} cellRenderer={renderLatCell} />
