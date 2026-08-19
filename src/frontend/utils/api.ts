@@ -76,9 +76,154 @@ export async function postJson<T = any>(
     return json.data;
 }
 
+/**
+ * SSE（text/event-stream）单条事件
+ */
+export interface SSEEvent {
+    event: string;      // 事件类型，缺省为 'message'
+    data: string;       // data 字段（多行 data 以 \n 拼接）
+    id?: string;        // 事件 id
+    retry?: number;     // 服务端建议的重连间隔(ms)
+}
+
+// 解析单个 SSE 帧（帧内以换行分隔的多个字段）
+function parseSSEFrame(frame: string): SSEEvent | null {
+    if (!frame) return null;
+
+    let event = 'message';
+    let id: string | undefined;
+    let retry: number | undefined;
+    const dataLines: string[] = [];
+
+    for (const line of frame.split('\n')) {
+        // 空行或以 ':' 开头的注释行，跳过
+        if (!line || line.startsWith(':')) continue;
+
+        const colon = line.indexOf(':');
+        const field = colon === -1 ? line : line.slice(0, colon);
+        let value = colon === -1 ? '' : line.slice(colon + 1);
+        // 规范规定去掉 value 的一个前导空格
+        if (value.startsWith(' ')) {
+            value = value.slice(1);
+        }
+
+        switch (field) {
+            case 'event':
+                event = value;
+                break;
+            case 'data':
+                dataLines.push(value);
+                break;
+            case 'id':
+                id = value;
+                break;
+            case 'retry': {
+                const n = parseInt(value, 10);
+                if (!Number.isNaN(n)) retry = n;
+                break;
+            }
+        }
+    }
+
+    // 纯注释/空帧，无有效字段则忽略
+    if (dataLines.length === 0 && id === undefined && retry === undefined && event === 'message') {
+        return null;
+    }
+
+    return { event, data: dataLines.join('\n'), id, retry };
+}
+
+/**
+ * 发起 SSE 流式请求，逐条回调 onEvent，直到流结束（Promise resolve）或出错（reject）。
+ */
+export async function fetchSSE(
+    url: string,
+    options: {
+        method?: 'GET' | 'POST';
+        params?: Record<string, any>;
+        body?: Record<string, any>;
+        signal?: AbortSignal;
+        onEvent: (event: SSEEvent) => void;
+    }
+): Promise<void> {
+    const { method = 'GET', params, body, signal, onEvent } = options;
+
+    let queryUrl = url;
+    if (method === 'GET' && params && typeof params === 'object') {
+        const sp = new URLSearchParams(params);
+        queryUrl += (url.includes('?') ? '&' : '?') + sp.toString();
+    }
+
+    const res = await fetch(`${BASE_API_URL}${queryUrl}`, {
+        method,
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'text/event-stream',
+        },
+        body: method === 'POST' ? JSON.stringify(body ?? params ?? {}) : undefined,
+        credentials: 'include',
+        signal: signal,
+    });
+
+    if (!res.ok) {
+        if (res.status === 401) {
+            location.href = '/login';
+            throw new Error('HTTP 401');
+        }
+        throw new Error(`HTTP ${res.status}`);
+    }
+
+    if (!res.body) {
+        throw new Error('SSE 响应无 body（当前环境不支持流式读取）');
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+                break;
+            }
+
+            // 统一换行为 \n，再按空行（\n\n）切分帧
+            buffer += decoder.decode(value, { stream: true }).replace(/\r\n?/g, '\n');
+
+            let sep: number;
+            while ((sep = buffer.indexOf('\n\n')) !== -1) {
+                const frame = buffer.slice(0, sep);
+                buffer = buffer.slice(sep + 2);
+                if (signal?.aborted) {
+                    return;
+                }
+                const evt = parseSSEFrame(frame);
+                if (evt) {
+                    onEvent(evt);
+                }
+            }
+        }
+
+        // flush 尾部残余（末尾无空行的最后一帧）
+        const tail = (buffer + decoder.decode()).trim();
+        if (tail && !signal?.aborted) {
+            const evt = parseSSEFrame(tail);
+            if (evt) {
+                onEvent(evt);
+            }
+        }
+    } finally {
+        // 主动释放底层连接
+        reader.cancel().catch(() => { /* 忽略取消错误 */ });
+    }
+}
+
 // 安全调用生命周期回调，回调内部抛错不影响请求主流程
 function safeCall(fn: ((...args: any[]) => void) | undefined, ...args: any[]) {
-    if (typeof fn !== 'function') return;
+    if (typeof fn !== 'function') {
+        return;
+    }
     try {
         fn(...args);
     } catch (e) {
@@ -140,6 +285,10 @@ export interface UseFetchOptions<T = any> {
     onSuccess?: (data: T, params: Record<string, any>) => void;
     onError?: (error: Error, params: Record<string, any>) => void;
     onFinally?: (params: Record<string, any>, data?: T, error?: Error) => void;
+
+    // SSE（text/event-stream）推送回调。设置后请求走流式读取，
+    // 每收到一条事件触发一次 onSSE；流正常结束时触发 onSuccess，出错触发 onError。
+    onSSE?: (event: SSEEvent) => void;
 }
 
 export interface UseFetchReturn<T> {
@@ -226,6 +375,7 @@ export function useFetch<T = any>(
                 onSuccess,
                 onError,
                 onFinally,
+                onSSE,
             } = optionsRef.current;
 
             // 请求前回调（仅在首次尝试触发，重试不重复触发）
@@ -234,6 +384,42 @@ export function useFetch<T = any>(
             }
 
             try {
+                // SSE 流式分支：设置了 onSSE 则走流式读取，逐条推送
+                if (typeof onSSE === 'function') {
+                    await fetchSSE(url, {
+                        method,
+                        params: method === 'GET' ? requestParams : undefined,
+                        body: method === 'POST' ? requestParams : undefined,
+                        signal: controller.signal,
+                        onEvent: (evt) => {
+                            if (controller.signal.aborted) {
+                                return;
+                            }
+                            safeCall(onSSE, evt);
+                        },
+                    });
+
+                    if (controller.signal.aborted) {
+                        return;
+                    }
+
+                    // 流正常结束：视为一次成功（无聚合 data）
+                    setError(null);
+                    setLoading(false);
+                    safeCall(onSuccess, undefined as unknown as T, requestParams);
+                    safeCall(onFinally, requestParams, undefined, undefined);
+
+                    // 轮询：流结束后按间隔重新建立连接
+                    if (pollingInterval && pollingInterval > 0) {
+                        pollingTimerRef.current = setTimeout(() => {
+                            executeCore(overrideParams, 0);
+                        }, pollingInterval);
+                    }
+
+                    return;
+                }
+
+                // 普通常规的http请求
                 const result = (method === 'GET')
                         ? await getJson<T>(url, requestParams, controller.signal)
                         : await postJson<T>(url, requestParams, controller.signal);
