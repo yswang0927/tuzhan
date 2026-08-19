@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
-const BASE_API_URL = 'http://127.0.0.1:9090';
+const BASE_API_URL = (window as any).BASE_URL || 'http://127.0.0.1:9090';
 
 /**
  * get 请求封装，直接返回后端data字段
@@ -8,11 +8,11 @@ const BASE_API_URL = 'http://127.0.0.1:9090';
  * @param {Object} [params] query参数对象
  * @returns {Promise<any>} 返回后端response.data
  */
-export async function getJson(
+export async function getJson<T = any>(
     url: string,
-    params: Record<string, any>,
+    params?: Record<string, any>,
     signal?: AbortSignal
-) {
+): Promise<T> {
     let queryUrl = url;
     if (params && typeof params === 'object') {
         const sp = new URLSearchParams(params);
@@ -30,8 +30,8 @@ export async function getJson(
     if (!res.ok) {
         if(res.status === 401){
             // 跳登录页
-            location.href = '/login'
-            return;
+            location.href = '/login';
+            throw new Error('HTTP 401');
         }
         throw new Error(`HTTP ${res.status}`);
     }
@@ -46,11 +46,11 @@ export async function getJson(
     return json.data;
 }
 
-export async function postJson(
+export async function postJson<T = any>(
     url: string,
     body: Record<string, any>,
     signal?: AbortSignal
-) {
+): Promise<T> {
     const res = await fetch(`${BASE_API_URL}${url}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -62,8 +62,8 @@ export async function postJson(
     if (!res.ok) {
         if(res.status === 401){
             // 跳登录页
-            location.href = '/login'
-            return;
+            location.href = '/login';
+            throw new Error('HTTP 401');
         }
         throw new Error(`HTTP ${res.status}`);
     }
@@ -76,9 +76,50 @@ export async function postJson(
     return json.data;
 }
 
-/* ============ useFetch() ============ */
+// 安全调用生命周期回调，回调内部抛错不影响请求主流程
+function safeCall(fn: ((...args: any[]) => void) | undefined, ...args: any[]) {
+    if (typeof fn !== 'function') return;
+    try {
+        fn(...args);
+    } catch (e) {
+        console.error('[useFetch] lifecycle callback error:', e);
+    }
+}
 
-export interface UseFetchOptions {
+/**
+ * ============ useFetch() ============
+ * 用法：
+ * const {data, loading, error} = useFetch('/api/xxx');
+ * 
+ * 手动触发：
+ * const {data, loading, error, run} = useFetch('/api/xxx', {immediate:false});
+ * <button onClick={run} disabled={loading}>
+ *  {loading ? 'Loading' : 'Edit'}
+ * </button>
+ * 
+ * 轮寻：
+ * const { data, run, abort } = useFetch('/api/xxx', { 
+ *  pollingInterval: 3000
+ * });
+ * 
+ * 防抖：
+ * const { data, run, abort } = useFetch('/api/xxx', { 
+ *  debounceInterval: 300
+ * });
+ * 
+ * 节流：
+ * const { data, run, abort } = useFetch('/api/xxx', { 
+ *  throttleInterval: 300
+ * });
+ * 
+ * 错误重试：
+ * const { data, run, abort } = useFetch('/api/xxx', { 
+ *  retryCount: 3,
+ *  retryInterval: 1000,
+ *  maxRetryInterval: 10000
+ * });
+ */
+export interface UseFetchOptions<T = any> {
     method?: 'GET' | 'POST';
     params?: Record<string, any>;
     immediate?: boolean;
@@ -93,6 +134,12 @@ export interface UseFetchOptions {
     maxRetryInterval?: number;
     retryBackoff?: boolean;
     retryJitter?: boolean;
+
+    // 生命周期回调
+    onBefore?: (params: Record<string, any>) => void;
+    onSuccess?: (data: T, params: Record<string, any>) => void;
+    onError?: (error: Error, params: Record<string, any>) => void;
+    onFinally?: (params: Record<string, any>, data?: T, error?: Error) => void;
 }
 
 export interface UseFetchReturn<T> {
@@ -106,15 +153,11 @@ export interface UseFetchReturn<T> {
 
 export function useFetch<T = any>(
     url: string,
-    options: UseFetchOptions = {}
+    options: UseFetchOptions<T> = {}
 ): UseFetchReturn<T> {
     const {
-        method = 'GET',
         params,
         immediate = true,
-        pollingInterval = 0,
-        debounceInterval = 0,
-        throttleInterval = 0,
         refreshOnWindowFocus = false,
     } = options;
 
@@ -152,6 +195,16 @@ export function useFetch<T = any>(
                 abortControllerRef.current.abort();
             }
 
+            // 发起新请求前清理挂起的轮询/重试定时器，避免定时器泄漏与请求链翻倍
+            if (pollingTimerRef.current) {
+                clearTimeout(pollingTimerRef.current);
+                pollingTimerRef.current = null;
+            }
+            if (retryTimerRef.current) {
+                clearTimeout(retryTimerRef.current);
+                retryTimerRef.current = null;
+            }
+
             const controller = new AbortController();
             abortControllerRef.current = controller;
 
@@ -169,7 +222,16 @@ export function useFetch<T = any>(
                 maxRetryInterval = 30000,
                 retryBackoff = true,
                 retryJitter = false,
+                onBefore,
+                onSuccess,
+                onError,
+                onFinally,
             } = optionsRef.current;
+
+            // 请求前回调（仅在首次尝试触发，重试不重复触发）
+            if (currentRetry === 0) {
+                safeCall(onBefore, requestParams);
+            }
 
             try {
                 const result = (method === 'GET')
@@ -184,6 +246,10 @@ export function useFetch<T = any>(
                 setError(null);
                 setLoading(false);
 
+                // 成功回调
+                safeCall(onSuccess, result, requestParams);
+                safeCall(onFinally, requestParams, result, undefined);
+
                 // 如果启用了轮寻
                 if (pollingInterval && pollingInterval > 0) {
                     pollingTimerRef.current = setTimeout(() => {
@@ -192,8 +258,10 @@ export function useFetch<T = any>(
                 }
 
                 return result;
+
             } catch (err: any) {
-                if ((typeof err === 'object' && err.name === 'AbortError') || controller.signal.aborted) {
+                if ((typeof err === 'object' && err.name === 'AbortError') 
+                    || controller.signal.aborted) {
                     return;
                 }
 
@@ -221,6 +289,10 @@ export function useFetch<T = any>(
                     // 重试次数用尽
                     setError(errorObj);
                     setLoading(false);
+
+                    // 失败回调
+                    safeCall(onError, errorObj, requestParams);
+                    safeCall(onFinally, requestParams, undefined, errorObj);
 
                     if (pollingInterval && pollingInterval > 0) {
                         pollingTimerRef.current = setTimeout(() => {
@@ -253,8 +325,10 @@ export function useFetch<T = any>(
             if (throttleInterval && throttleInterval > 0) {
                 return new Promise((resolve) => {
                     if (isThrottledRef.current) {
+                        resolve(undefined);
                         return;
                     }
+
                     isThrottledRef.current = true;
                     throttleTimerRef.current = setTimeout(() => {
                         isThrottledRef.current = false;
