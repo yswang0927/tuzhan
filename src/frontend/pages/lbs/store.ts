@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { TrajectoryData } from "../common/TrajectoryDataTable";
+import type { TrajectoryData } from "../common/types";
 
 export interface TrajectoryState {
     trajectoryData: TrajectoryData[];

@@ -22,6 +22,7 @@
     "@blueprintjs/select": "^6.3.4",
     "@blueprintjs/table": "^6.2.4",
     "@hookform/resolvers": "^5.7.1",
+    "eventemitter3": "^5.0.4",
     "lucide-react": "^1.31.0",
     "ol": "^10.10.0",
     "ol-mapbox-style": "^13.4.2",

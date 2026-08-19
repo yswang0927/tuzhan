@@ -15,6 +15,7 @@ import "./style.css";
 export default function Home() {
     const { t } = useL10n();
     const { mainMenu, setMainMenu } = useHomeStore();
+    const setMapApi = useHomeStore(state => state.setMapApi);
     const menusConfig = useMenusConfig();
     const resizerDomRef = useRef<HTMLDivElement | null>(null);
     const submenuContainerRef = useRef<HTMLDivElement | null>(null);
@@ -139,7 +140,10 @@ export default function Home() {
             <div className="map-app-main relative">
                 <div className="absolute inset-0">
                     <OpenLayersMap
-                        ref={mapRef}
+                        ref={(handle) => {
+                            mapRef.current = handle;
+                            setMapApi(handle); // 卸载时 handle 为 null，自动清理
+                        }}
                         onPointClick={(d) => console.log("点击点:", d)}
                         onLineClick={(d) => console.log("点击线:", d)}
                         onPolygonClick={(d) => console.log("点击多边形:", d)}

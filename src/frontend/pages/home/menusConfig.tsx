@@ -3,7 +3,7 @@ import { useL10n } from "@/l10n";
 import { type PanelProps } from "@blueprintjs/core";
 
 import { LocationQueryPanel, LastLocationPanel } from "./TrajectoryQueryCom";
-import { TrajectoryDataTable } from "@/pages/common/TrajectoryDataTable";
+import { TrajectoryDataTableContainer } from "./TrajectoryDataTableContainer";
 
 export interface SubMenuConfig {
     id: string;
@@ -44,9 +44,9 @@ export const useMenusConfig = (): MainMenuConfig[] => {
             name: t('轨迹查询'),
             icon: 'path-search',
             submenus: [
-                { id: 'person-location', name: t('人员轨迹定位'), icon: 'geolocation', panel: LocationQueryPanel, footer: TrajectoryDataTable },
+                { id: 'person-location', name: t('人员轨迹定位'), icon: 'geolocation', panel: LocationQueryPanel, footer: TrajectoryDataTableContainer },
                 { id: 'trajectory-tracking', name: t('轨迹回溯'), icon: 'history', panel: GenericContentPanel, footer: GenericFooter },
-                { id: 'last-position', name: t('最后一次位置'), icon: 'map-marker', panel: LastLocationPanel, footer: TrajectoryDataTable },
+                { id: 'last-position', name: t('最后一次位置'), icon: 'map-marker', panel: LastLocationPanel, footer: TrajectoryDataTableContainer },
                 { id: 'my-footprints', name: t('我的足迹'), icon: 'walk', panel: GenericContentPanel, footer: GenericFooter },
             ]
         },

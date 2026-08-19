@@ -16,6 +16,8 @@ import { useL10n } from "@/l10n";
 
 import { ObjectSuggest } from "@/pages/common/ObjectSuggest";
 
+import { useHomeStore } from "./store";
+
 
 const DATE_PICKER_LOCALES = {
     'zh-CN': zhCN,
@@ -36,8 +38,8 @@ interface PanelEmptyProps {
  */
 export const LocationQueryPanel: React.FC<PanelProps<PanelEmptyProps>> = (props) => {
     const { t, lang } = useL10n();
-    //const setTrajectoryData = useTrajectoryStore(state => state.setTrajectoryData);
-    //const setTableLoading = useTrajectoryStore(state => state.setTableLoading);
+    const setTrajectoryData = useHomeStore(state => state.setTrajectoryData);
+    const setTableLoading = useHomeStore(state => state.setTableLoading);
     const { register, handleSubmit, control, setValue, watch, formState: { errors } } = useForm({
         defaultValues: {
             objectId: null as string | null,
@@ -56,7 +58,7 @@ export const LocationQueryPanel: React.FC<PanelProps<PanelEmptyProps>> = (props)
     const doQuery = (formData: any) => {
         console.log(">>> formData: ", formData);
         setQuerying(true);
-        //setTableLoading(true);
+        setTableLoading(true);
         getJson('/api/trajectory/query-trajectories', {
             ...formData,
             startTime: formData.startTime ? format(formData.startTime, 'yyyy-MM-dd HH:mm:ss') : '',
@@ -64,15 +66,21 @@ export const LocationQueryPanel: React.FC<PanelProps<PanelEmptyProps>> = (props)
         })
             .then(data => {
                 console.log(">>> data: ", data);
-                //setTrajectoryData(data || []);
+                const list = Array.isArray(data) ? data : [];
+                // 1. 写入 store，底部表格自动展示
+                setTrajectoryData(list);
+                // 2. 调用地图 API 绘制轨迹(命令式，不订阅，避免多余重渲染)
+                const mapApi = useHomeStore.getState().mapApi;
+                mapApi?.drawLines(list, { lineColor: "#1890ff", showDirection: true });
+                mapApi?.focusLine(list);
             })
             .catch(err => {
                 console.error(">>> err: ", err);
-                //setTrajectoryData([]);
+                setTrajectoryData([]);
             })
             .finally(() => {
                 setQuerying(false);
-                //setTableLoading(false);
+                setTableLoading(false);
             });
     };
 
@@ -140,8 +148,8 @@ export const LocationQueryPanel: React.FC<PanelProps<PanelEmptyProps>> = (props)
  */
 export const LastLocationPanel: React.FC<PanelProps<PanelEmptyProps>> = (props) => {
     const { t } = useL10n();
-    //const setTrajectoryData = useTrajectoryStore(state => state.setTrajectoryData);
-    //const setTableLoading = useTrajectoryStore(state => state.setTableLoading);
+    const setTrajectoryData = useHomeStore(state => state.setTrajectoryData);
+    const setTableLoading = useHomeStore(state => state.setTableLoading);
     const { handleSubmit, control, formState: { errors } } = useForm({
         defaultValues: {
             objectId: null as string | null,
@@ -153,19 +161,25 @@ export const LastLocationPanel: React.FC<PanelProps<PanelEmptyProps>> = (props) 
     const doQuery = (formData: any) => {
         console.log(">>> formData: ", formData);
         setQuerying(true);
-        //setTableLoading(true);
+        setTableLoading(true);
         getJson('/api/trajectory/query-lastlocation', formData)
             .then(data => {
                 console.log(">>> data: ", data);
-                //setTrajectoryData(Array.isArray(data) ? data : data ? [data] : []);
+                const list = Array.isArray(data) ? data : data ? [data] : [];
+                setTrajectoryData(list);
+                const mapApi = useHomeStore.getState().mapApi;
+                if (list[0]) {
+                    mapApi?.drawPoint(list[0]);
+                    mapApi?.focusPoint(list[0]);
+                }
             })
             .catch(err => {
                 console.error(">>> err: ", err);
-                //setTrajectoryData([]);
+                setTrajectoryData([]);
             })
             .finally(() => {
                 setQuerying(false);
-                //setTableLoading(false);
+                setTableLoading(false);
             });
     };
 

@@ -3,7 +3,7 @@
  */
 export interface TrajectoryData {
     objectId: string;     // 帐号唯一ID
-    eventTime: string;   // 绝对时间戳(秒)
+    eventTime: number;   // 绝对时间戳(秒)
     lon: number;          // 经度
     lat: number;          // 纬度
 }
