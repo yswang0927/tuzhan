@@ -72,7 +72,7 @@ export const LocationQueryPanel: React.FC<PanelProps<PanelEmptyProps>> = (props)
                 // 2. 调用地图 API 绘制轨迹(命令式，不订阅，避免多余重渲染)
                 const mapApi = useHomeStore.getState().mapApi;
                 mapApi?.drawLines(list, { lineColor: "#1890ff", showDirection: true });
-                mapApi?.focusLine(list);
+                //mapApi?.focusLine(list);
             })
             .catch(err => {
                 console.error(">>> err: ", err);
@@ -170,7 +170,7 @@ export const LastLocationPanel: React.FC<PanelProps<PanelEmptyProps>> = (props) 
                 const mapApi = useHomeStore.getState().mapApi;
                 if (list[0]) {
                     mapApi?.drawPoint(list[0]);
-                    mapApi?.focusPoint(list[0]);
+                    //mapApi?.focusPoint(list[0]);
                 }
             })
             .catch(err => {

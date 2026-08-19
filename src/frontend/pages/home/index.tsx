@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import Draggable from "react-draggable";
 import { Button, ButtonGroup } from "@blueprintjs/core";
 
@@ -16,6 +16,12 @@ export default function Home() {
     const { t } = useL10n();
     const { mainMenu, setMainMenu } = useHomeStore();
     const setMapApi = useHomeStore(state => state.setMapApi);
+
+    // 稳定的回调 ref：只在挂载/卸载时各调一次，避免内联函数每次渲染都触发 setMapApi 造成死循环
+    const mapCallbackRef = useCallback((handle: OpenLayersMapHandle | null) => {
+        mapRef.current = handle;
+        setMapApi(handle); // 卸载时 handle 为 null，自动清理
+    }, [setMapApi]);
     const menusConfig = useMenusConfig();
     const resizerDomRef = useRef<HTMLDivElement | null>(null);
     const submenuContainerRef = useRef<HTMLDivElement | null>(null);
@@ -140,10 +146,7 @@ export default function Home() {
             <div className="map-app-main relative">
                 <div className="absolute inset-0">
                     <OpenLayersMap
-                        ref={(handle) => {
-                            mapRef.current = handle;
-                            setMapApi(handle); // 卸载时 handle 为 null，自动清理
-                        }}
+                        ref={mapCallbackRef}
                         onPointClick={(d) => console.log("点击点:", d)}
                         onLineClick={(d) => console.log("点击线:", d)}
                         onPolygonClick={(d) => console.log("点击多边形:", d)}
