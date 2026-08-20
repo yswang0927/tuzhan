@@ -1,18 +1,18 @@
 import { CardList, Card, Icon, Classes, PanelStack, type Panel, type PanelProps } from "@blueprintjs/core";
 import { useHomeStore } from "./store";
-import { useEffect } from "react";
+import { useEffect, useCallback, useMemo } from "react";
 import { useMenusConfig, type SubMenuConfig } from "./menusConfig";
 
 const DynamicMenuPanel = (props: PanelProps<{ mainId: string, submenus?: SubMenuConfig[] }>) => {
-    const { submenus } = props;
+    const { submenus, openPanel: propsOpenPanel } = props;
 
-    const openPanel = (submenu: SubMenuConfig) => {
-        props.openPanel({
+    const openPanel = useCallback((submenu: SubMenuConfig) => {
+        propsOpenPanel({
             title: submenu.name,
             renderPanel: submenu.panel as any,
             props: { id: submenu.id, title: submenu.name },
         });
-    };
+    }, [propsOpenPanel]);
 
     if (!submenus || !Array.isArray(submenus)) {
         return <div className="p-4 text-gray-500">No submenus available</div>;
@@ -45,15 +45,28 @@ export const MainMenuPanelStack = () => {
         setActiveSubMenuId(null);
     }, [mainMenuId, setActiveSubMenuId]);
 
-    if (!activeMainMenuConfig) {
+    const initialPanel: Panel<any> | null = useMemo(() => {
+        if (!activeMainMenuConfig) return null;
+        return {
+            title: activeMainMenuConfig.name,
+            renderPanel: DynamicMenuPanel as any,
+            props: { mainId: activeMainMenuConfig.id, submenus: activeMainMenuConfig.submenus }
+        };
+    }, [activeMainMenuConfig]);
+
+    const handleOpen = useCallback((panel: Panel<any>) => {
+        if (panel.props && (panel.props as any).id) {
+            setActiveSubMenuId((panel.props as any).id);
+        }
+    }, [setActiveSubMenuId]);
+
+    const handleClose = useCallback(() => {
+        setActiveSubMenuId(null);
+    }, [setActiveSubMenuId]);
+
+    if (!activeMainMenuConfig || !initialPanel) {
         return <div>Error: Main menu config not found for {mainMenuId}</div>;
     }
-
-    const initialPanel: Panel<any> = {
-        title: activeMainMenuConfig.name,
-        renderPanel: DynamicMenuPanel as any,
-        props: { mainId: activeMainMenuConfig.id, submenus: activeMainMenuConfig.submenus }
-    };
 
     return (
         <div className="map-app-search-panel h-full">
@@ -62,21 +75,16 @@ export const MainMenuPanelStack = () => {
                 initialPanel={initialPanel}
                 showPanelHeader={true}
                 renderActivePanelOnly={true}
-                onOpen={(panel) => {
-                    if (panel.props && (panel.props as any).id) {
-                        setActiveSubMenuId((panel.props as any).id);
-                    }
-                }}
-                onClose={() => {
-                    setActiveSubMenuId(null);
-                }}
+                onOpen={handleOpen}
+                onClose={handleClose}
             />
         </div>
     );
 };
 
 export const BottomAreaContent = () => {
-    const { mainMenu, activeSubMenuId } = useHomeStore();
+    const mainMenu = useHomeStore(state => state.mainMenu);
+    const activeSubMenuId = useHomeStore(state => state.activeSubMenuId);
     const menusConfig = useMenusConfig();
 
     let content = null;
@@ -91,11 +99,11 @@ export const BottomAreaContent = () => {
     }
 
     if (!content) {
-        content = <div className="text-gray-500">请选择一个子菜单查看内容</div>;
+        content = (<div>请选择一个子菜单查看内容</div>);
     }
 
     return (
-        <div className="p-4 h-full bg-white dark:bg-gray-800">
+        <div className="relative h-full">
             {content}
         </div>
     );

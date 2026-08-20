@@ -1,6 +1,5 @@
-package com.tuzhan.web.trajectory;
+package com.tuzhan.trajectory;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -10,7 +9,6 @@ import java.util.Objects;
  * 一条完整的轨迹（按 eventTime 升序排列的轨迹点集合）
  */
 public class Trajectory {
-
     // 目标对象ID
     private final String objectId;
 

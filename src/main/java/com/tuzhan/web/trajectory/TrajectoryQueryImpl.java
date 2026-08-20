@@ -9,6 +9,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import com.tuzhan.repository.BaseRepository;
+import com.tuzhan.trajectory.TrajectoryPoint;
+import com.tuzhan.trajectory.TrajectorySplitter;
 
 @Service
 public class TrajectoryQueryImpl extends BaseRepository implements TrajectoryQuery {
@@ -70,7 +72,9 @@ public class TrajectoryQueryImpl extends BaseRepository implements TrajectoryQue
         params.put("etime", etime);
 
         try {
-            return IDFA_JDBC.queryForList(TrajectoryPoint.class, sql, params, 1, 1000);
+            List<TrajectoryPoint> trajectoryPoints = IDFA_JDBC.queryForList(TrajectoryPoint.class, sql, params, 1, 5000);
+            // 参数：时间间隔阈值 300s，速度上限 55m/s(约200km/h)，最少点数 2
+            return TrajectorySplitter.split(trajectoryPoints, 1800, 55, 2);
         } catch (Exception e) {
             LOG.error("Failed to query object(={}, {} ~ {}) trajectories.", objectId, startTime, endTime);
         }

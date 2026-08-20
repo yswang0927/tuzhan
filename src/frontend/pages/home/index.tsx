@@ -14,7 +14,8 @@ import "./style.css";
 
 export default function Home() {
     const { t } = useL10n();
-    const { mainMenu, setMainMenu } = useHomeStore();
+    const mainMenu = useHomeStore(state => state.mainMenu);
+    const setMainMenu = useHomeStore(state => state.setMainMenu);
     const setMapApi = useHomeStore(state => state.setMapApi);
 
     // 稳定的回调 ref：只在挂载/卸载时各调一次，避免内联函数每次渲染都触发 setMapApi 造成死循环

@@ -3,6 +3,7 @@ import { useL10n } from "@/l10n";
 import { type PanelProps } from "@blueprintjs/core";
 
 import { LocationQueryPanel, LastLocationPanel } from "./TrajectoryQueryCom";
+import { AreaCollisionFormPanel } from "./CollisionAnalysisCom";
 import { TrajectoryDataTableContainer } from "./TrajectoryDataTableContainer";
 
 export interface SubMenuConfig {
@@ -55,7 +56,7 @@ export const useMenusConfig = (): MainMenuConfig[] => {
             name: t('时空碰撞'),
             icon: 'bullseye',
             submenus: [
-                { id: 'region-collision', name: t('区域碰撞分析'), icon: 'polygon-filter', panel: GenericContentPanel, footer: GenericFooter },
+                { id: 'region-collision', name: t('区域碰撞分析'), icon: 'polygon-filter', panel: AreaCollisionFormPanel, footer: TrajectoryDataTableContainer },
                 { id: 'person-collision', name: t('人员轨迹碰撞'), icon: 'intersection', panel: GenericContentPanel, footer: GenericFooter },
                 { id: 'region-person', name: t('区域人员分析'), icon: 'people', panel: GenericContentPanel, footer: GenericFooter },
                 { id: 'first-appearance', name: t('首次出现人员'), icon: 'new-person', panel: GenericContentPanel, footer: GenericFooter },

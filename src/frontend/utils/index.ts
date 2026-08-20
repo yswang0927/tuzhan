@@ -13,15 +13,73 @@ export const uuid = (len: number = 0) => {
 
 /**
  * 格式化日期时间戳秒数
- * @param date 日期对象或时间戳秒数
+ * @param dateValue 日期对象或时间戳秒数
  * @param fmt 日期字符串格式，默认：yyyy/MM/dd HH:mm:ss
  */
-export const formatDate = (date: Date | number, fmt?: string): string => {
-    if (date === null) {
-      return "";
+export const formatDate = (dateValue: Date | number, fmt?: string): string => {
+  if (dateValue === null) {
+    return "";
+  }
+
+  const fmtVal = fmt || 'yyyy/MM/dd HH:mm:ss';
+  if (dateValue instanceof Date) {
+    return format(dateValue, fmtVal);
+  }
+  if (!Number.isNaN(dateValue)) {
+    if (String(dateValue).length === 10) {
+      return format(new Date(dateValue * 1000), fmtVal);
     }
-    return format(date instanceof Number ? new Date(date) : date, fmt ? fmt : 'yyyy/MM/dd HH:mm:ss');
+    if (String(dateValue).length === 13) {
+      return format(new Date(dateValue), fmtVal);
+    }
+  }
+  return String(dateValue);
 };
+
+/**
+ * hex颜色转rgba字符串
+ * @param hex #RGB | #RGBA | #RRGGBB | #RRGGBBAA
+ * @param alpha 可选，指定透明度值(0‑1之间)
+ * @returns rgba(r,g,b,a)
+ */
+export function hexToRgba(hex: string, alpha?: number): string {
+  if (!/^#([0-9A-Fa-f]{3,4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/.test(hex)) {
+    return hex;
+  }
+
+  let c = hex.substring(1).split('');
+  // #RGB → #RRGGBB；#RGBA → #RRGGBBAA
+  if (c.length === 3 || c.length === 4) {
+    c = c.flatMap(ch => [ch, ch]);
+  }
+
+  const num = parseInt(c.join(''), 16);
+  let r: number, g: number, b: number, a: number;
+
+  if (c.length === 8) {
+    // RRGGBBAA 8位
+    r = (num >> 24) & 0xff;
+    g = (num >> 16) & 0xff;
+    b = (num >> 8) & 0xff;
+    a = (num & 0xff) / 255;
+  } else {
+    // RRGGBB 6位
+    r = (num >> 16) & 0xff;
+    g = (num >> 8) & 0xff;
+    b = num & 0xff;
+    a = 1;
+  }
+
+  // 如果传入合法alpha参数，则覆盖原有透明度，并钳位0‑1
+  if (alpha !== undefined && !Number.isNaN(alpha)) {
+    a = Math.max(0, Math.min(1, alpha));
+  }
+
+  const result = `rgba(${r},${g},${b},${a.toFixed(2)})`;
+  console.log(hex, result);
+  return result;
+}
+
 
 /**
  * 防抖函数返回值接口，扩展了取消和立即执行的方法
@@ -216,7 +274,6 @@ const fallbackCopyText = (text: string): boolean => {
     return false;
   }
 };
-
 
 /**
  * 布局resize通用函数, 用于拖动手柄resize 左|右|上|下 区域的大小.
@@ -563,6 +620,139 @@ export async function downloadFile(
     return { success: false, error: String(e) };
   }
 }
+
+export interface PolygonToSvgOptions {
+  /** 输出尺寸，默认 64 */
+  size?: number;
+  /** 内边距，防止贴边，默认 4 */
+  padding?: number;
+  /** 填充色，默认 '#3b82f6' */
+  fill?: string;
+  /** 描边色，默认 '#1e40af' */
+  stroke?: string;
+  /** 描边宽度，默认 1.5 */
+  strokeWidth?: number;
+  /** 背景色，默认 'transparent' */
+  background?: string;
+  /** 是否保持原始图形宽高比（不拉伸），默认 true */
+  keepAspect?: boolean;
+  /** 单点时的圆点半径，默认 3 */
+  pointRadius?: number;
+}
+
+/**
+ * 把经纬度多边形/折线/点转换成固定尺寸的 SVG 字符串
+ * @param coords [[lon, lat], [lon, lat], ...]
+ * @param options 可选配置
+ * @returns SVG 字符串
+ */
+export function polygonToSvg(
+  coords: Array<[number, number]> | null | undefined,
+  options: PolygonToSvgOptions = {}
+): string {
+  const {
+    size = 64,
+    padding = 4,
+    fill = '#3b82f6',
+    stroke = '#1e40af',
+    strokeWidth = 1.5,
+    background = 'transparent',
+    keepAspect = true,
+    pointRadius = 3,
+  } = options;
+
+  // 空数据
+  if (!coords || coords.length === 0) {
+    return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg"></svg>`;
+  }
+
+  // ========== 1. 计算包围盒 ==========
+  let minLon = Infinity;
+  let maxLon = -Infinity;
+  let minLat = Infinity;
+  let maxLat = -Infinity;
+
+  for (const [lon, lat] of coords) {
+    minLon = Math.min(minLon, lon);
+    maxLon = Math.max(maxLon, lon);
+    minLat = Math.min(minLat, lat);
+    maxLat = Math.max(maxLat, lat);
+  }
+
+  const lonRange = maxLon - minLon || 1e-9;
+  const latRange = maxLat - minLat || 1e-9;
+  const drawSize = size - padding * 2;
+
+  // ========== 2. 计算缩放与偏移 ==========
+  let scaleX: number;
+  let scaleY: number;
+  let offsetX = 0;
+  let offsetY = 0;
+
+  if (keepAspect) {
+    const avgLat = (minLat + maxLat) / 2;
+    const lonFactor = Math.cos((avgLat * Math.PI) / 180);
+    const geoW = lonRange * lonFactor;
+    const geoH = latRange;
+    const geoRatio = geoW / geoH;
+
+    if (geoRatio > 1) {
+      // 地理更宽 → 以宽度为准，垂直居中
+      scaleX = scaleY = drawSize / geoW;
+      offsetY = (drawSize - geoH * scaleY) / 2;
+    } else {
+      // 地理更高或接近正方形 → 以高度为准，水平居中
+      scaleY = scaleX = drawSize / geoH;
+      offsetX = (drawSize - geoW * scaleX) / 2;
+    }
+  } else {
+    // 不保持比例，直接撑满画布
+    scaleX = drawSize / lonRange;
+    scaleY = drawSize / latRange;
+  }
+
+  // ========== 3. 坐标映射（纬度需要翻转） ==========
+  const toX = (lon: number): number => padding + offsetX + (lon - minLon) * scaleX;
+  const toY = (lat: number): number => padding + offsetY + (maxLat - lat) * scaleY;
+
+  // ========== 4. 根据点数生成不同图形 ==========
+  let shape = '';
+
+  if (coords.length === 1) {
+    // 单点 → 圆点
+    const [lon, lat] = coords[0];
+    const cx = toX(lon);
+    const cy = toY(lat);
+    // 范围极小时强制居中
+    const finalCx = lonRange < 1e-8 && latRange < 1e-8 ? size / 2 : cx;
+    const finalCy = lonRange < 1e-8 && latRange < 1e-8 ? size / 2 : cy;
+
+    shape = `<circle cx="${finalCx.toFixed(2)}" cy="${finalCy.toFixed(2)}" r="${pointRadius}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth * 0.6}"/>`;
+  } else if (coords.length === 2) {
+    // 两点 → 线段
+    const x1 = toX(coords[0][0]);
+    const y1 = toY(coords[0][1]);
+    const x2 = toX(coords[1][0]);
+    const y2 = toY(coords[1][1]);
+
+    shape = `<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linecap="round"/>`;
+  } else {
+    // ≥3 点 → 多边形
+    const points = coords
+      .map(([lon, lat]) => `${toX(lon).toFixed(2)},${toY(lat).toFixed(2)}`)
+      .join(' ');
+
+    shape = `<polygon points="${points}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linejoin="round"/>`;
+  }
+
+  // ========== 5. 输出 SVG ==========
+  return `
+<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
+  ${background !== 'transparent' ? `<rect width="${size}" height="${size}" fill="${background}"/>` : ''}
+  ${shape}
+</svg>`.trim();
+}
+
 
 export const AppToaster = OverlayToaster.create({
   className: "opal-toaster",
