@@ -49,3 +49,37 @@
 .bp6-dark .menu-dot {
     background-color: #abb3bf;
 }
+
+.ol-popup {
+    position: relative;
+    background: #383E47;
+    border-radius: 6px;
+    padding: 10px 15px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    white-space: nowrap;
+    pointer-events: auto;
+}
+.ol-popup::before,
+.ol-popup::after {
+    content: "";
+    display: block;
+    position: absolute;
+    left: 50%;
+    margin-left: -10px;
+    bottom: -8px;
+    width: 0;
+    height: 0;
+    border-top: 10px solid transparent; /* 箭头颜色 */
+    border-right: 10px solid transparent;
+    border-left: 10px solid transparent;
+    z-index: 0;
+}
+.ol-popup::before {
+    bottom: -8px;
+    border-top: 10px solid #383E47; /* 箭头颜色 */
+    z-index: 1;
+}
+.ol-popup::after {
+    bottom: -10px;
+    border-top: 10px solid rgba(0,0,0,0.15); /* 箭头阴影颜色 */
+}

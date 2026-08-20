@@ -10,6 +10,7 @@ import VectorSource from 'ol/source/Vector.js';
 import Attribution from 'ol/control/Attribution.js';
 import { defaults as defaultControls } from 'ol/control/defaults.js';
 import Draw from 'ol/interaction/Draw.js';
+import Overlay from 'ol/Overlay.js';
 import { fromLonLat, toLonLat } from 'ol/proj.js';
 import { getVectorContext } from 'ol/render.js';
 import { unByKey } from 'ol/Observable.js';
@@ -17,6 +18,8 @@ import { easeOut } from 'ol/easing.js';
 import { Style, Stroke, Fill, Circle as CircleStyle, RegularShape } from 'ol/style.js';
 import type { Geometry } from 'ol/geom.js';
 import { apply } from 'ol-mapbox-style';
+
+import {formatDate} from "@/utils";    
 
 import 'ol/ol.css';
 
@@ -120,7 +123,7 @@ const POINT_COLOR = '#f5222d';
 const HIGHLIGHT_DURATION = 2500; // 高亮动画周期(ms)
 
 // Feature 上挂载的自定义属性 key
-const KIND = 'kind';         // 'point' | 'line' | 'polygon'
+const KIND = 'kind';         // 'point' | 'line' | 'polygon' | 'lineVertex'
 const RAW_DATA = 'rawData';  // 原始数据, 用于点击回调
 
 export function OpenLayersMap({ ref, onPointClick, onLineClick, onPolygonClick, onDrawEnd }: OpenLayersMapProps = {}) {
@@ -136,6 +139,10 @@ export function OpenLayersMap({ ref, onPointClick, onLineClick, onPolygonClick, 
     // 交互绘制: 临时图层 + 当前 Draw 交互
     const drawSourceRef = useRef(new VectorSource());
     const drawInteractionRef = useRef<Draw | null>(null);
+
+    // 弹窗 Overlay
+    const popupRef = useRef<HTMLDivElement | null>(null);
+    const overlayRef = useRef<Overlay | null>(null);
 
     // 记录正在做高亮动画的点 feature -> 其 postrender 监听 key, 防止重复注册
     const animatingRef = useRef<Map<Feature, any>>(new Map());
@@ -173,7 +180,8 @@ export function OpenLayersMap({ ref, onPointClick, onLineClick, onPolygonClick, 
                     image: new RegularShape({
                         points: 3,
                         radius: 7,
-                        fill: new Fill({ color }),
+                        stroke: new Stroke({ color: color, width: 1 }),
+                        fill: new Fill({ color: '#fff' }),
                         rotateWithView: true,
                         // RegularShape 三角形默认朝上, 需旋转对齐线方向
                         rotation: -rotation + Math.PI / 2,
@@ -238,6 +246,18 @@ export function OpenLayersMap({ ref, onPointClick, onLineClick, onPolygonClick, 
         return result;
     };
 
+    // 两个经纬度点之间的球面距离(米)
+    const haversine = (a: number[], b: number[]): number => {
+        const R = 6378137;
+        const toRad = (d: number) => (d * Math.PI) / 180;
+        const dLat = toRad(b[1] - a[1]);
+        const dLon = toRad(b[0] - a[0]);
+        const lat1 = toRad(a[1]);
+        const lat2 = toRad(b[1]);
+        const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+        return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+    };
+
     // 将地图视野适配到给定 extent
     const fitExtent = (extent: number[] | undefined | null) => {
         const map = mapRef.current;
@@ -277,18 +297,6 @@ export function OpenLayersMap({ ref, onPointClick, onLineClick, onPolygonClick, 
         return { type, coordinates: geom.getCoordinates?.() };
     };
 
-    // 两个经纬度点之间的球面距离(米)
-    const haversine = (a: number[], b: number[]): number => {
-        const R = 6378137;
-        const toRad = (d: number) => (d * Math.PI) / 180;
-        const dLat = toRad(b[1] - a[1]);
-        const dLon = toRad(b[0] - a[0]);
-        const lat1 = toRad(a[1]);
-        const lat2 = toRad(b[1]);
-        const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-        return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
-    };
-
     useImperativeHandle(ref, (): OpenLayersMapHandle => ({
         drawPoint: (point: PointData) => {
             if (point.lon === undefined || point.lat === undefined) return;
@@ -312,6 +320,23 @@ export function OpenLayersMap({ ref, onPointClick, onLineClick, onPolygonClick, 
                 feature.set(RAW_DATA, { ...group, options } as LineData);
                 feature.setStyle(buildLineStyle(feature, options));
                 lineSourceRef.current.addFeature(feature);
+
+                // 在每个拐点绘制白色背景圆点
+                for (const p of group.points) {
+                    const vertexFeature = new Feature({
+                        geometry: new Point(fromLonLat([p.lon, p.lat])),
+                    });
+                    vertexFeature.set(KIND, 'lineVertex');
+                    vertexFeature.set(RAW_DATA, p);
+                    vertexFeature.setStyle(new Style({
+                        image: new CircleStyle({
+                            radius: 8,
+                            fill: new Fill({ color: '#fff' }),
+                            stroke: new Stroke({ color: options.lineColor || DEFAULT_LINE_COLOR, width: 2 }),
+                        }),
+                    }));
+                    lineSourceRef.current.addFeature(vertexFeature);
+                }
             }
         },
 
@@ -433,6 +458,8 @@ export function OpenLayersMap({ ref, onPointClick, onLineClick, onPolygonClick, 
             lineSourceRef.current.clear();
             polygonSourceRef.current.clear();
             drawSourceRef.current.clear();
+            overlayRef.current?.setPosition(undefined);
+            popupRef.current && (popupRef.current.innerHTML = '');
         },
     }), []);
 
@@ -470,18 +497,74 @@ export function OpenLayersMap({ ref, onPointClick, onLineClick, onPolygonClick, 
 
         apply(map, styleJson);
 
+        // 弹窗 Overlay
+        const overlay = new Overlay({
+            element: popupRef.current!,
+            autoPan: true,
+            positioning: 'bottom-center',
+            offset: [0, -20],
+        });
+        map.addOverlay(overlay);
+        overlayRef.current = overlay;
+
         // 统一的要素点击分发
         const clickKey = map.on('singleclick', (evt) => {
             // 交互绘制进行时, 不触发要素点击回调
-            if (drawInteractionRef.current) return;
+            if (drawInteractionRef.current) {
+                return;
+            }
+
             const feature = map.forEachFeatureAtPixel(evt.pixel, (f) => f as Feature<Geometry>);
-            if (!feature) return;
+            if (!feature) {
+                overlayRef.current?.setPosition(undefined);
+                return;
+            }
+
             const kind = feature.get(KIND);
             const raw = feature.get(RAW_DATA);
             const cbs = callbacksRef.current;
-            if (kind === 'point') cbs.onPointClick?.(raw as PointData);
-            else if (kind === 'line') cbs.onLineClick?.(raw as LineData);
-            else if (kind === 'polygon') cbs.onPolygonClick?.(raw as PolygonData);
+
+            if (kind === 'lineVertex') {
+                const p = raw as PointData;
+                const overlay = overlayRef.current;
+                const popup = popupRef.current;
+                if (overlay && popup) {
+                    popup.innerHTML = `
+                        <div style="font-size:12px;line-height:1.6;">
+                            <div><b>objectId:</b> ${p.objectId}</div>
+                            <div><b>eventTime:</b> ${formatDate(p.eventTime)}</div>
+                            <div><b>lon:</b> ${p.lon}</div>
+                            <div><b>lat:</b> ${p.lat}</div>
+                        </div>`;
+                    overlay.setPosition((feature.getGeometry() as Point).getCoordinates());
+                }
+            } else {
+                overlayRef.current?.setPosition(undefined);
+
+                if (kind === 'point') {
+                    const p = raw as PointData;
+                    const overlay = overlayRef.current;
+                    const popup = popupRef.current;
+                    if (overlay && popup) {
+                        popup.innerHTML = `
+                            <div style="font-size:12px;line-height:1.6;">
+                                <div><b>objectId:</b> ${p.objectId}</div>
+                                <div><b>eventTime:</b> ${formatDate(p.eventTime)}</div>
+                                <div><b>lon:</b> ${p.lon}</div>
+                                <div><b>lat:</b> ${p.lat}</div>
+                            </div>`;
+                        overlay.setPosition((feature.getGeometry() as Point).getCoordinates());
+                    }
+
+                    cbs.onPointClick?.(raw as PointData);
+                }
+                else if (kind === 'line') {
+                    cbs.onLineClick?.(raw as LineData);
+                }
+                else if (kind === 'polygon') {
+                    cbs.onPolygonClick?.(raw as PolygonData);
+                }
+            }
         });
 
         // 悬停到要素时切换指针样式
@@ -500,6 +583,7 @@ export function OpenLayersMap({ ref, onPointClick, onLineClick, onPolygonClick, 
                 map.removeInteraction(drawInteractionRef.current);
                 drawInteractionRef.current = null;
             }
+            overlayRef.current = null;
             map.setTarget(undefined);
             mapRef.current = null;
             pointLayerRef.current = null;
@@ -509,6 +593,7 @@ export function OpenLayersMap({ ref, onPointClick, onLineClick, onPolygonClick, 
     return (
         <div className="relative w-full h-full">
             <div ref={mapDomRef} className="absolute inset-0"></div>
+            <div ref={popupRef} className="ol-popup"></div>
         </div>
     );
 }
