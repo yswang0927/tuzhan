@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+
 import com.tuzhan.repository.BaseRepository;
 import com.tuzhan.trajectory.Trajectory;
 import com.tuzhan.trajectory.TrajectoryPoint;
@@ -31,6 +32,14 @@ public class TrajectoryQueryImpl extends BaseRepository implements TrajectoryQue
         return Collections.emptyList();
     }
 
+    /**
+     * 查询某个对象在指定时间范围内容的轨迹。
+     *
+     * @param objectId
+     * @param startTime
+     * @param endTime
+     * @return
+     */
     @Override
     public List<Trajectory> queryObjectTrajectories(String objectId, Instant startTime, Instant endTime) {
         if (!StringUtils.hasText(objectId)) {
@@ -59,12 +68,10 @@ public class TrajectoryQueryImpl extends BaseRepository implements TrajectoryQue
                 stime = etime;
                 etime = tmp;
             }
-        }
-        else if (startTime != null) {
+        } else if (startTime != null) {
             stime = startTime.getEpochSecond();
             etime = startTime.plus(maxDuration).getEpochSecond();
-        }
-        else if (endTime != null) {
+        } else if (endTime != null) {
             stime = endTime.minus(maxDuration).getEpochSecond();
             etime = endTime.getEpochSecond();
         }

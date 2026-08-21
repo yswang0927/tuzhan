@@ -71,14 +71,27 @@ export const LocationQueryPanel: React.FC<PanelProps<PanelEmptyProps>> = (props)
     useEffect(() => {
         if (!loading && data) {
             console.log(">>> data: ", data);
-            const list = Array.isArray(data) ? data : [];
-            // 1. 写入 store，底部表格自动展示
-            setTrajectoryData(list);
-            setTableLoading(false);
-            // 2. 调用地图 API 绘制轨迹(命令式，不订阅，避免多余重渲染)
+            /*
+               [{
+                  objectId:'', points:[{objectId,eventTime,lon,lat},{}]
+                },{}]
+             */
+            const trajs = Array.isArray(data) ? data : [];
+            const tableData = [];
+
+            // 调用地图 API 绘制轨迹(命令式，不订阅，避免多余重渲染)
             const mapApi = useHomeStore.getState().mapApi;
-            mapApi?.drawLines(list, { lineColor: "#1890ff", showDirection: true });
-            mapApi?.focusLine(list);
+            if (mapApi) {
+                mapApi.clearAll();
+                for (const traj of trajs) {
+                    tableData.push(...traj.points);
+                    mapApi?.drawLine(traj.points, { lineColor: "#1890ff", showDirection: true });
+                }
+                mapApi.fitViewport(tableData);
+            }
+
+            setTrajectoryData(tableData);
+            setTableLoading(false);
         }
     }, [data, loading, setTrajectoryData, setTableLoading]);
 
@@ -180,10 +193,12 @@ export const LastLocationPanel: React.FC<PanelProps<PanelEmptyProps>> = (props) 
             setTableLoading(false);
 
             const mapApi = useHomeStore.getState().mapApi;
-            mapApi?.clearAll();
-            if (list[0]) {
-                mapApi?.drawPoint(list[0]);
-                mapApi?.focusPoint(list[0]);
+            if (mapApi) {
+                mapApi.clearAll();
+                if (list[0]) {
+                    mapApi.drawPoint(list[0]);
+                    mapApi.focusPoint(list[0]);
+                }
             }
         }
     }, [data, loading]);

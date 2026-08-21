@@ -142,39 +142,43 @@ public final class TrajectorySplitter {
     }
 
     /**
-     * 单链（single-linkage）空间聚类：距离小于 radius 的点归为一簇。
-     * 同一时间片的点数通常很少，O(n^2) 足够。
+     * 全链（complete-linkage）空间聚类：一个点只有与簇内<b>所有</b>已有点的距离都 ≤ radius 时才并入该簇。
+     * <p>相比单链，避免了 A—B—C 逐跳相邻却首尾相距 2R 的"链式吞并"——簇直径被钳制在 radius 内，
+     * 保证同一簇内的点确实彼此邻近（真正的同一位置观测），而非一条被拉长的链。
+     * <p>为保证结果与输入顺序无关（确定性），先按 (lon, lat) 排序再贪心归簇。
+     * 同一时间片点数通常很少，O(n^2) 足够。
      */
     private static List<List<TrajectoryPoint>> cluster(List<TrajectoryPoint> points, double radiusMeter) {
+        List<TrajectoryPoint> sorted = new ArrayList<>(points);
+        sorted.sort(Comparator.comparingDouble(TrajectoryPoint::getLon)
+                .thenComparingDouble(TrajectoryPoint::getLat));
+
         List<List<TrajectoryPoint>> clusters = new ArrayList<>();
-        boolean[] assigned = new boolean[points.size()];
-
-        for (int i = 0; i < points.size(); i++) {
-            if (assigned[i]) {
-                continue;
-            }
-            List<TrajectoryPoint> c = new ArrayList<>();
-            Deque<Integer> queue = new ArrayDeque<>();
-            queue.add(i);
-            assigned[i] = true;
-
-            while (!queue.isEmpty()) {
-                int idx = queue.poll();
-                TrajectoryPoint a = points.get(idx);
-                c.add(a);
-                for (int j = 0; j < points.size(); j++) {
-                    if (!assigned[j]) {
-                        TrajectoryPoint b = points.get(j);
-                        if (haversine(a.getLon(), a.getLat(), b.getLon(), b.getLat()) <= radiusMeter) {
-                            assigned[j] = true;
-                            queue.add(j);
-                        }
-                    }
+        for (TrajectoryPoint p : sorted) {
+            List<TrajectoryPoint> target = null;
+            for (List<TrajectoryPoint> c : clusters) {
+                if (fitsAll(p, c, radiusMeter)) {
+                    target = c;
+                    break;
                 }
             }
-            clusters.add(c);
+            if (target == null) {
+                target = new ArrayList<>();
+                clusters.add(target);
+            }
+            target.add(p);
         }
         return clusters;
+    }
+
+    /** complete-linkage 判定：p 与簇内每一个点的距离都 ≤ radius。 */
+    private static boolean fitsAll(TrajectoryPoint p, List<TrajectoryPoint> cluster, double radiusMeter) {
+        for (TrajectoryPoint q : cluster) {
+            if (haversine(p.getLon(), p.getLat(), q.getLon(), q.getLat()) > radiusMeter) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** 计算一组点的算术平均质心，生成代表点。 */
@@ -204,6 +208,7 @@ public final class TrajectorySplitter {
             return pts;
         }
         double maxSpeed = config.getMaxSpeedMeterPerSec();
+        long maxGap = config.getMaxTimeGapSec();
         List<TrajectoryPoint> result = new ArrayList<>(pts.size());
         result.add(pts.get(0));
 
@@ -213,7 +218,7 @@ public final class TrajectorySplitter {
             TrajectoryPoint curr = pts.get(i);
             TrajectoryPoint next = pts.get(i + 1);
 
-            if (isJump(prev, curr, next, maxSpeed)) {
+            if (isJump(prev, curr, next, maxSpeed, maxGap)) {
                 // 丢弃 curr，prev 不变，继续检查 next
                 i++;
             } else {
@@ -226,12 +231,25 @@ public final class TrajectorySplitter {
         return result;
     }
 
-    /** 三点跳变判定：两侧都超速、跨越正常，则中点为跳点。时间差非正时不判为跳点，交由分段处理。 */
-    private static boolean isJump(TrajectoryPoint prev, TrajectoryPoint curr, TrajectoryPoint next, double maxSpeed) {
+    /**
+     * 三点跳变判定：两侧都超速、跨越正常，则中点为跳点。
+     * <p>护栏：
+     * <ul>
+     *   <li>时间差非正：不判为跳点，交由分段处理；</li>
+     *   <li>prev→curr 或 curr→next 跨越大时间间隔（> maxTimeGap）：这本就是轨迹边界，
+     *       curr 很可能属于另一段轨迹，绝不能当毛刺删除，交由分段处理。</li>
+     * </ul>
+     */
+    private static boolean isJump(TrajectoryPoint prev, TrajectoryPoint curr, TrajectoryPoint next,
+                                  double maxSpeed, long maxTimeGapSec) {
         long dt1 = curr.getEventTime() - prev.getEventTime();
         long dt2 = next.getEventTime() - curr.getEventTime();
         long dt3 = next.getEventTime() - prev.getEventTime();
         if (dt1 <= 0 || dt2 <= 0 || dt3 <= 0) {
+            return false;
+        }
+        // 跨越大时间间隔的点是轨迹边界候选，不是 GPS 毛刺，不删除
+        if (dt1 > maxTimeGapSec || dt2 > maxTimeGapSec) {
             return false;
         }
         double s1 = haversine(prev.getLon(), prev.getLat(), curr.getLon(), curr.getLat()) / dt1;

@@ -87,8 +87,8 @@ export interface DrawResult {
 export interface OpenLayersMapHandle {
     /** 绘制高亮动画点 */
     drawPoint: (point: PointData) => void;
-    /** 绘制带方向箭头的分组轨迹线 */
-    drawLines: (points: PointData[], options?: LineOptions) => void;
+    /** 绘制带方向箭头的轨迹线 */
+    drawLine: (points: PointData[], options?: LineOptions) => void;
     /** 绘制多边形区域 */
     drawPolygon: (id: string, coordinates: number[][], options?: PolygonOptions) => void;
     /** 聚焦某个点 */
@@ -97,6 +97,8 @@ export interface OpenLayersMapHandle {
     focusLine: (points: PointData[]) => void;
     /** 聚焦某个多边形区域 */
     focusPolygon: (id: string, coordinates?: number[][]) => void;
+    /** 根据一组点计算外接矩形, 并将该区域移动到地图中间 */
+    fitViewport: (points: PointData[]) => void;
     /** 开启交互绘制, 用户在地图上用鼠标绘制几何图形, 完成后回调返回数据 */
     startDraw: (type: DrawType, options?: DrawOptions) => void;
     /** 取消当前正在进行的交互绘制 */
@@ -271,6 +273,24 @@ export function OpenLayersMap({ ref, onPointClick, onLineClick, onPolygonClick, 
         });
     };
 
+    // 根据一组点计算外接矩形并将该区域移动到地图中间(focusLine / fitViewport 共用)
+    const fitPoints = (points: PointData[]) => {
+        const coords = (points || [])
+            .filter((p) => p.lon !== undefined && p.lat !== undefined)
+            .map((p) => fromLonLat([p.lon, p.lat]));
+        if (coords.length === 0) return;
+        // 累计外接矩形 [minX, minY, maxX, maxY]
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const [x, y] of coords) {
+            if (x < minX) minX = x;
+            if (y < minY) minY = y;
+            if (x > maxX) maxX = x;
+            if (y > maxY) maxY = y;
+        }
+        // fitExtent 内部已处理居中、padding、无效值防御及单点(退化)情况
+        fitExtent([minX, minY, maxX, maxY]);
+    };
+
     // 将绘制得到的几何图形转换为经纬度结果
     const geometryToResult = (type: DrawType, geom: any): DrawResult => {
         if (type === 'Point') {
@@ -310,33 +330,36 @@ export function OpenLayersMap({ ref, onPointClick, onLineClick, onPolygonClick, 
             startHighlight(feature);
         },
 
-        drawLines: (points: PointData[], options: LineOptions = {}) => {
-            const groups = groupPointsByObject(points);
-            for (const group of groups) {
-                if (group.points.length < 2) continue;
-                const coords = group.points.map((p) => fromLonLat([p.lon, p.lat]));
-                const feature = new Feature({ geometry: new LineString(coords) });
-                feature.set(KIND, 'line');
-                feature.set(RAW_DATA, { ...group, options } as LineData);
-                feature.setStyle(buildLineStyle(feature, options));
-                lineSourceRef.current.addFeature(feature);
+        drawLine: (points: PointData[], options: LineOptions = {}) => {
+            if (!points || points.length == 0) return;
+            const coords = points.map((p) => fromLonLat([p.lon, p.lat]));
+            const feature = new Feature({ geometry: new LineString(coords) });
+            feature.set(KIND, 'line');
+            feature.set(RAW_DATA, options);
+            feature.setStyle(buildLineStyle(feature, options));
+            lineSourceRef.current.addFeature(feature);
 
-                // 在每个拐点绘制白色背景圆点
-                for (const p of group.points) {
-                    const vertexFeature = new Feature({
-                        geometry: new Point(fromLonLat([p.lon, p.lat])),
-                    });
-                    vertexFeature.set(KIND, 'lineVertex');
-                    vertexFeature.set(RAW_DATA, p);
-                    vertexFeature.setStyle(new Style({
-                        image: new CircleStyle({
-                            radius: 8,
-                            fill: new Fill({ color: '#fff' }),
-                            stroke: new Stroke({ color: options.lineColor || DEFAULT_LINE_COLOR, width: 2 }),
+            // 在每个拐点绘制白色背景圆点
+            for (let i = 0, len = points.length; i < len; i++) {
+                const p = points[i];
+                 const vertexFeature = new Feature({
+                    geometry: new Point(fromLonLat([p.lon, p.lat])),
+                });
+                vertexFeature.set(KIND, 'lineVertex');
+                vertexFeature.set(RAW_DATA, p);
+                vertexFeature.setStyle(new Style({
+                    image: new CircleStyle({
+                        radius: 8,
+                        fill: new Fill({ 
+                            color: i === 0 ? '#52c41a' : ( i === len - 1 ? '#f5222d' : '#fff') 
                         }),
-                    }));
-                    lineSourceRef.current.addFeature(vertexFeature);
-                }
+                        stroke: new Stroke({ 
+                            color: options.lineColor || DEFAULT_LINE_COLOR, 
+                            width: 2 
+                        })
+                    })
+                }));
+                lineSourceRef.current.addFeature(vertexFeature);
             }
         },
 
@@ -368,11 +391,7 @@ export function OpenLayersMap({ ref, onPointClick, onLineClick, onPolygonClick, 
         },
 
         focusLine: (points: PointData[]) => {
-            const coords = points
-                .filter((p) => p.lon !== undefined && p.lat !== undefined)
-                .map((p) => fromLonLat([p.lon, p.lat]));
-            if (coords.length === 0) return;
-            fitExtent(new LineString(coords).getExtent());
+            fitPoints(points);
         },
 
         focusPolygon: (id: string, coordinates?: number[][]) => {
@@ -387,6 +406,10 @@ export function OpenLayersMap({ ref, onPointClick, onLineClick, onPolygonClick, 
             if (feature) {
                 fitExtent(feature.getGeometry()?.getExtent());
             }
+        },
+
+        fitViewport: (points: PointData[]) => {
+            fitPoints(points);
         },
 
         startDraw: (type: DrawType, options: DrawOptions = {}) => {
