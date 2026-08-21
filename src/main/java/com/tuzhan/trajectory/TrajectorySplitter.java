@@ -1,118 +1,283 @@
 package com.tuzhan.trajectory;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
-public class TrajectorySplitter {
+/**
+ * 轨迹切分器。
+ *
+ * 处理流程（针对 ClickHouse user_gps_detail 这类数据：同一 idfa_md5 + event_time 存在多条并行观测，
+ * event_time 规整到 10 分钟网格）：
+ * <pre>
+ *   1. 校验入参同属一个 objectId
+ *   2. 按 event_time 升序分组
+ *   3. 同一时间片做空间聚类，结合上一代表点做"连续性选择"，得到每时刻一个代表点
+ *      —— 避免"北京 + 上海取平均 = 江苏幽灵点"
+ *   4. GPS 跳点删除（三点法）：prev→curr、curr→next 都超速但 prev→next 正常时，curr 是毛刺，删除而非切断
+ *   5. 分段：时间间隔过大 / 速度超限 / 单步位移超限 时切断
+ *   6. 过滤点数不足的轨迹，输出结构化 Trajectory
+ * </pre>
+ */
+public final class TrajectorySplitter {
 
     // 地球半径（米）
     private static final double EARTH_RADIUS = 6371000.0;
 
-    /**
-     * 切分轨迹
-     *
-     * @param points              原始点列表（同一 objectId）
-     * @param timeThresholdSec    时间间隔阈值（秒），默认建议 1800（30分钟）
-     * @param maxSpeedMeterPerSec 速度上限（米/秒），相邻点位移速度超过该值视为异常跳变而切断，
-     *                            默认建议 55（约 200km/h，可覆盖高速/高铁出行）
-     *   只处理地面出行(步行/骑行/开车/高铁),想在"疑似飞行或数据跳变"处切断 → 取 ~85 m/s(约 300km/h,高铁上限) 比较合适,我之前填的 55 偏保守,高铁会被误切。
-     *   也想把飞机当成连续轨迹保留 → 得放到 ~250 m/s 以上。
-     *   只关心市内活动,想把任何城际长途都切开 → 取 ~35 m/s(约 120km/h) 就够。
-     * @param minPoints           一条有效轨迹最少点数，默认 3
-     * @return 切分并过滤后的点列表（已设置 trajId）
-     */
-    public static List<TrajectoryPoint> split(List<TrajectoryPoint> points,
-                                       long timeThresholdSec,
-                                       double maxSpeedMeterPerSec,
-                                       int minPoints) {
+    private TrajectorySplitter() {}
 
+    /**
+     * 切分轨迹，返回结构化轨迹列表。
+     *
+     * @param points 原始点列表（必须同属一个 objectId）
+     * @param config 切分配置，为 null 时使用默认配置
+     * @return 按起始时间升序的轨迹列表；输入为空时返回空列表
+     * @throws IllegalArgumentException 当 points 中存在不同的 objectId
+     */
+    public static List<Trajectory> split(List<TrajectoryPoint> points, TrajectorySplitConfig config) {
         if (points == null || points.isEmpty()) {
             return Collections.emptyList();
         }
-
-        // 1. 按 event_time 聚合去噪：同一时间截面存在多条并行观测记录，
-        //    将其塌缩为一个质心代表点，得到"每时刻一个点"后再串线。
-        //    聚合结果同时保证按时间升序（TreeMap 有序），无需再排序。
-        List<TrajectoryPoint> sorted = aggregateByEventTime(points);
-
-        // 2. 切分并分配 trajId
-        int currentTrajId = 0;
-        sorted.get(0).setTrajId(currentTrajId);
-
-        for (int i = 1; i < sorted.size(); i++) {
-            TrajectoryPoint prev = sorted.get(i - 1);
-            TrajectoryPoint curr = sorted.get(i);
-
-            long timeDiff = curr.getEventTime() - prev.getEventTime();
-            double dist = haversine(prev.getLon(), prev.getLat(), curr.getLon(), curr.getLat());
-            // 聚合后每个 event_time 仅一个点，相邻点时间必然不同，timeDiff > 0
-            double speed = dist / timeDiff;
-            // 切断条件：时间间隔过大（停歇断点） 或 位移速度超上限（异常跳变）
-            if (timeDiff > timeThresholdSec || speed > maxSpeedMeterPerSec) {
-                currentTrajId++;
-            }
-            curr.setTrajId(currentTrajId);
+        if (config == null) {
+            config = TrajectorySplitConfig.defaults();
         }
 
-        // 3. 过滤点数过少的轨迹
-        Map<Integer, Long> countMap = sorted.stream()
-                .collect(Collectors.groupingBy(TrajectoryPoint::getTrajId, Collectors.counting()));
+        // 1. 校验：全部点必须同属一个 objectId
+        String objectId = validateSameObject(points);
 
-        Set<Integer> validTrajIds = countMap.entrySet().stream()
-                .filter(e -> e.getValue() >= minPoints)
-                .map(Map.Entry::getKey)
-                .collect(Collectors.toSet());
-
-        List<TrajectoryPoint> result = sorted.stream()
-                .filter(p -> validTrajIds.contains(p.getTrajId()))
-                .collect(Collectors.toList());
-
-        // 4. 重新编号 trajId（从 0 开始连续）
-        Map<Integer, Integer> idMapping = new HashMap<>();
-        int newId = 0;
-        for (TrajectoryPoint p : result) {
-            if (!idMapping.containsKey(p.getTrajId())) {
-                idMapping.put(p.getTrajId(), newId++);
-            }
-            p.setTrajId(idMapping.get(p.getTrajId()));
-        }
-
-        return result;
-    }
-
-    /**
-     * 按 event_time 聚合去噪。
-     * 同一 idfa_md5 在同一时间截面（10 分钟网格）会有多条相互独立的经纬度观测，
-     * 这些点视为噪声，取算术平均质心塌缩为单个代表点。
-     * 同一时刻的观测在地理上邻近，不会跨越 180° 经线，故算术平均质心是安全的。
-     * 返回结果按 event_time 升序。
-     */
-    private static List<TrajectoryPoint> aggregateByEventTime(List<TrajectoryPoint> points) {
-        // TreeMap 保证按 event_time 升序输出
+        // 2. 按 event_time 升序分组
+        //    TreeMap 保证时间升序；单用户查询量级（数千点）下开销可忽略
         Map<Long, List<TrajectoryPoint>> byTime = new TreeMap<>();
         for (TrajectoryPoint p : points) {
             byTime.computeIfAbsent(p.getEventTime(), k -> new ArrayList<>()).add(p);
         }
 
-        List<TrajectoryPoint> result = new ArrayList<>(byTime.size());
-        for (Map.Entry<Long, List<TrajectoryPoint>> e : byTime.entrySet()) {
-            List<TrajectoryPoint> group = e.getValue();
-            double sumLon = 0.0;
-            double sumLat = 0.0;
-            for (TrajectoryPoint p : group) {
-                sumLon += p.getLon();
-                sumLat += p.getLat();
-            }
-            int n = group.size();
+        // 3. 同一时间片空间聚类 + 连续性选择，得到每时刻一个代表点（在线：依赖上一代表点）
+        List<TrajectoryPoint> reps = selectRepresentatives(byTime, objectId, config);
 
-            TrajectoryPoint centroid = new TrajectoryPoint();
-            centroid.setObjectId(group.get(0).getObjectId());
-            centroid.setEventTime(e.getKey());
-            centroid.setLon(sumLon / n);
-            centroid.setLat(sumLat / n);
-            result.add(centroid);
+        // 4. GPS 跳点删除（三点法）
+        if (config.isRemoveJumpPoints()) {
+            reps = removeJumpPoints(reps, config);
+        }
+
+        // 5. 分段
+        List<List<TrajectoryPoint>> segments = segment(reps, config);
+
+        // 6. 过滤 + 结构化
+        List<Trajectory> result = new ArrayList<>();
+        for (List<TrajectoryPoint> seg : segments) {
+            if (seg.size() >= config.getMinPoints()) {
+                result.add(new Trajectory(objectId, seg));
+            }
         }
         return result;
+    }
+
+    /** 使用默认配置切分。 */
+    public static List<Trajectory> split(List<TrajectoryPoint> points) {
+        return split(points, TrajectorySplitConfig.defaults());
+    }
+
+    /** 校验所有点同属一个 objectId，返回该 objectId。 */
+    private static String validateSameObject(List<TrajectoryPoint> points) {
+        String objectId = points.get(0).getObjectId();
+        for (TrajectoryPoint p : points) {
+            if (!Objects.equals(objectId, p.getObjectId())) {
+                throw new IllegalArgumentException(
+                        "All points must belong to the same objectId, but found ["
+                                + objectId + "] and [" + p.getObjectId() + "]");
+            }
+        }
+        return objectId;
+    }
+
+    /**
+     * 对每个 event_time 的点做空间聚类，并结合上一代表点选出本时刻的代表点。
+     * <p>选择策略：
+     * <ul>
+     *   <li>只有一个簇：直接取其质心；</li>
+     *   <li>多个簇且尚无上一代表点（轨迹起点）：取点数最多的簇质心；</li>
+     *   <li>多个簇且有上一代表点：取质心离上一代表点最近的簇（连续性）。</li>
+     * </ul>
+     * 只在簇内部做算术平均质心——簇内点已确认空间邻近，不会造出跨区域幽灵点。
+     */
+    private static List<TrajectoryPoint> selectRepresentatives(
+            Map<Long, List<TrajectoryPoint>> byTime, String objectId, TrajectorySplitConfig config) {
+
+        List<TrajectoryPoint> reps = new ArrayList<>(byTime.size());
+        TrajectoryPoint previous = null;
+
+        for (Map.Entry<Long, List<TrajectoryPoint>> e : byTime.entrySet()) {
+            List<List<TrajectoryPoint>> clusters =
+                    cluster(e.getValue(), config.getSameTimeClusterRadiusMeter());
+
+            List<TrajectoryPoint> chosen;
+            if (clusters.size() == 1) {
+                chosen = clusters.get(0);
+            } else if (previous == null) {
+                // 起点无参照：取最大簇（观测最密集处，最可能是真实位置）
+                chosen = clusters.get(0);
+                for (List<TrajectoryPoint> c : clusters) {
+                    if (c.size() > chosen.size()) {
+                        chosen = c;
+                    }
+                }
+            } else {
+                // 取质心离上一代表点最近的簇
+                chosen = null;
+                double best = Double.MAX_VALUE;
+                for (List<TrajectoryPoint> c : clusters) {
+                    TrajectoryPoint ctr = centroid(c, objectId, e.getKey());
+                    double d = haversine(previous.getLon(), previous.getLat(), ctr.getLon(), ctr.getLat());
+                    if (d < best) {
+                        best = d;
+                        chosen = c;
+                    }
+                }
+            }
+
+            TrajectoryPoint rep = centroid(chosen, objectId, e.getKey());
+            reps.add(rep);
+            previous = rep;
+        }
+        return reps;
+    }
+
+    /**
+     * 单链（single-linkage）空间聚类：距离小于 radius 的点归为一簇。
+     * 同一时间片的点数通常很少，O(n^2) 足够。
+     */
+    private static List<List<TrajectoryPoint>> cluster(List<TrajectoryPoint> points, double radiusMeter) {
+        List<List<TrajectoryPoint>> clusters = new ArrayList<>();
+        boolean[] assigned = new boolean[points.size()];
+
+        for (int i = 0; i < points.size(); i++) {
+            if (assigned[i]) {
+                continue;
+            }
+            List<TrajectoryPoint> c = new ArrayList<>();
+            Deque<Integer> queue = new ArrayDeque<>();
+            queue.add(i);
+            assigned[i] = true;
+
+            while (!queue.isEmpty()) {
+                int idx = queue.poll();
+                TrajectoryPoint a = points.get(idx);
+                c.add(a);
+                for (int j = 0; j < points.size(); j++) {
+                    if (!assigned[j]) {
+                        TrajectoryPoint b = points.get(j);
+                        if (haversine(a.getLon(), a.getLat(), b.getLon(), b.getLat()) <= radiusMeter) {
+                            assigned[j] = true;
+                            queue.add(j);
+                        }
+                    }
+                }
+            }
+            clusters.add(c);
+        }
+        return clusters;
+    }
+
+    /** 计算一组点的算术平均质心，生成代表点。 */
+    private static TrajectoryPoint centroid(List<TrajectoryPoint> group, String objectId, long eventTime) {
+        double sumLon = 0.0;
+        double sumLat = 0.0;
+        for (TrajectoryPoint p : group) {
+            sumLon += p.getLon();
+            sumLat += p.getLat();
+        }
+        int n = group.size();
+        TrajectoryPoint c = new TrajectoryPoint();
+        c.setObjectId(objectId);
+        c.setEventTime(eventTime);
+        c.setLon(sumLon / n);
+        c.setLat(sumLat / n);
+        return c;
+    }
+
+    /**
+     * GPS 跳点删除（三点法）。
+     * 对 prev → curr → next：若 prev→curr 与 curr→next 均超速，而 prev→next 正常，
+     * 则 curr 判定为瞬时跳变毛刺，删除。删除后以 prev 为基准继续检查后续点。
+     */
+    private static List<TrajectoryPoint> removeJumpPoints(List<TrajectoryPoint> pts, TrajectorySplitConfig config) {
+        if (pts.size() < 3) {
+            return pts;
+        }
+        double maxSpeed = config.getMaxSpeedMeterPerSec();
+        List<TrajectoryPoint> result = new ArrayList<>(pts.size());
+        result.add(pts.get(0));
+
+        int i = 1;
+        while (i < pts.size() - 1) {
+            TrajectoryPoint prev = result.get(result.size() - 1);
+            TrajectoryPoint curr = pts.get(i);
+            TrajectoryPoint next = pts.get(i + 1);
+
+            if (isJump(prev, curr, next, maxSpeed)) {
+                // 丢弃 curr，prev 不变，继续检查 next
+                i++;
+            } else {
+                result.add(curr);
+                i++;
+            }
+        }
+        // 末点始终保留（三点法覆盖不到，末点无 next 可判）
+        result.add(pts.get(pts.size() - 1));
+        return result;
+    }
+
+    /** 三点跳变判定：两侧都超速、跨越正常，则中点为跳点。时间差非正时不判为跳点，交由分段处理。 */
+    private static boolean isJump(TrajectoryPoint prev, TrajectoryPoint curr, TrajectoryPoint next, double maxSpeed) {
+        long dt1 = curr.getEventTime() - prev.getEventTime();
+        long dt2 = next.getEventTime() - curr.getEventTime();
+        long dt3 = next.getEventTime() - prev.getEventTime();
+        if (dt1 <= 0 || dt2 <= 0 || dt3 <= 0) {
+            return false;
+        }
+        double s1 = haversine(prev.getLon(), prev.getLat(), curr.getLon(), curr.getLat()) / dt1;
+        double s2 = haversine(curr.getLon(), curr.getLat(), next.getLon(), next.getLat()) / dt2;
+        double s3 = haversine(prev.getLon(), prev.getLat(), next.getLon(), next.getLat()) / dt3;
+        return s1 > maxSpeed && s2 > maxSpeed && s3 <= maxSpeed;
+    }
+
+    /**
+     * 分段：遍历代表点，遇到断点开启新段。
+     * 断点条件（满足其一）：时间间隔 > maxTimeGap，或位移速度 > maxSpeed，或单步位移 > maxStepDistance。
+     */
+    private static List<List<TrajectoryPoint>> segment(List<TrajectoryPoint> pts, TrajectorySplitConfig config) {
+        List<List<TrajectoryPoint>> segments = new ArrayList<>();
+        if (pts.isEmpty()) {
+            return segments;
+        }
+
+        List<TrajectoryPoint> current = new ArrayList<>();
+        current.add(pts.get(0));
+
+        for (int i = 1; i < pts.size(); i++) {
+            TrajectoryPoint prev = pts.get(i - 1);
+            TrajectoryPoint curr = pts.get(i);
+
+            long timeDiff = curr.getEventTime() - prev.getEventTime();
+            double dist = haversine(prev.getLon(), prev.getLat(), curr.getLon(), curr.getLat());
+            // 防御：时间非严格递增时直接切断，避免除零/负速度
+            boolean cut;
+            if (timeDiff <= 0) {
+                cut = true;
+            } else {
+                double speed = dist / timeDiff;
+                cut = timeDiff > config.getMaxTimeGapSec()
+                        || speed > config.getMaxSpeedMeterPerSec()
+                        || dist > config.getMaxStepDistanceMeter();
+            }
+
+            if (cut) {
+                segments.add(current);
+                current = new ArrayList<>();
+            }
+            current.add(curr);
+        }
+        segments.add(current);
+        return segments;
     }
 
     /**
@@ -129,14 +294,5 @@ public class TrajectorySplitter {
         double c = 2 * Math.asin(Math.sqrt(a));
         return EARTH_RADIUS * c;
     }
-
-    /**
-     * 按 trajId 分组，方便后续使用
-     */
-    public static Map<Integer, List<TrajectoryPoint>> groupByTrajId(List<TrajectoryPoint> points) {
-        return points.stream()
-                .collect(Collectors.groupingBy(TrajectoryPoint::getTrajId,
-                        LinkedHashMap::new,   // 保持顺序
-                        Collectors.toList()));
-    }
 }
+

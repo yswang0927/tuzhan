@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import com.github.sisyphsu.dateparser.DateParserUtils;
+import com.tuzhan.trajectory.Trajectory;
 import com.tuzhan.trajectory.TrajectoryPoint;
 
 @RestController
@@ -37,7 +38,7 @@ public class TrajectoryController {
      * @return
      */
     @GetMapping("/query-trajectories")
-    public List<TrajectoryPoint> queryObjectTrajectories(@RequestParam(name="objectId") String objectId,
+    public List<Trajectory> queryObjectTrajectories(@RequestParam(name="objectId") String objectId,
                                                          @RequestParam(name="startTime") String startTime,
                                                          @RequestParam(name="endTime") String endTime) {
         Instant stime = null;

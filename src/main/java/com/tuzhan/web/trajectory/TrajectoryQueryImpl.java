@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import com.tuzhan.repository.BaseRepository;
+import com.tuzhan.trajectory.Trajectory;
 import com.tuzhan.trajectory.TrajectoryPoint;
 import com.tuzhan.trajectory.TrajectorySplitter;
 
@@ -31,7 +32,7 @@ public class TrajectoryQueryImpl extends BaseRepository implements TrajectoryQue
     }
 
     @Override
-    public List<TrajectoryPoint> queryObjectTrajectories(String objectId, Instant startTime, Instant endTime) {
+    public List<Trajectory> queryObjectTrajectories(String objectId, Instant startTime, Instant endTime) {
         if (!StringUtils.hasText(objectId)) {
             return Collections.emptyList();
         }
@@ -41,7 +42,7 @@ public class TrajectoryQueryImpl extends BaseRepository implements TrajectoryQue
         }
 
         String sql = "select idfa_md5 as objectId, event_time as eventTime, lon, lat from idfa_gps_detail " +
-                "where idfa_md5 = :objectId [and event_time >= :stime] [and event_time <= :etime]";
+                "where idfa_md5 = :objectId [and event_time >= :stime] [and event_time <= :etime] order by event_time asc";
 
         Map<String, Object> params = new HashMap<>(4);
         params.put("objectId", objectId);
@@ -73,8 +74,8 @@ public class TrajectoryQueryImpl extends BaseRepository implements TrajectoryQue
 
         try {
             List<TrajectoryPoint> trajectoryPoints = IDFA_JDBC.queryForList(TrajectoryPoint.class, sql, params, 1, 5000);
-            // 参数：时间间隔阈值 300s，速度上限 55m/s(约200km/h)，最少点数 2
-            return TrajectorySplitter.split(trajectoryPoints, 1800, 55, 2);
+            // 使用默认配置：时间间隔 30min、速度上限 85m/s、单步位移 50km、同时间片聚类半径 500m、最少点数 3
+            return TrajectorySplitter.split(trajectoryPoints);
         } catch (Exception e) {
             LOG.error("Failed to query object(={}, {} ~ {}) trajectories.", objectId, startTime, endTime);
         }

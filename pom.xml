@@ -123,9 +123,9 @@
 		<dependency>
 			<groupId>com.gdk</groupId>
 			<artifactId>gdk-db3</artifactId>
-			<version>3.8.2</version>
+			<version>3.9.0</version>
 			<scope>system</scope>
-			<systemPath>${basedir}/lib/gdk-db3-3.8.2.jar</systemPath>
+			<systemPath>${basedir}/lib/gdk-db3-3.9.0.jar</systemPath>
 		</dependency>
 
 		<!-- 用于日期格式的自动检测解析 -->

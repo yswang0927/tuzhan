@@ -13,9 +13,6 @@ public class TrajectoryPoint {
     // 纬度
     private double lat;
 
-    // 此点属于哪个轨迹线(用于分组归并轨迹点到所属的线)
-    private int trajId;
-
     public String getObjectId() {
         return objectId;
     }
@@ -46,13 +43,5 @@ public class TrajectoryPoint {
 
     public void setLat(double lat) {
         this.lat = lat;
-    }
-
-    public int getTrajId() {
-        return trajId;
-    }
-
-    public void setTrajId(int trajId) {
-        this.trajId = trajId;
     }
 }

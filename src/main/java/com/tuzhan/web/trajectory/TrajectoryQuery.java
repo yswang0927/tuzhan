@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
+import com.tuzhan.trajectory.Trajectory;
 import com.tuzhan.trajectory.TrajectoryPoint;
 
 /**
@@ -25,9 +26,9 @@ public interface TrajectoryQuery {
      * @param objectId
      * @param startTime
      * @param endTime
-     * @return 轨迹点列表，无数据时返回空列表
+     * @return 结构化轨迹列表，无数据时返回空列表
      */
-    List<TrajectoryPoint> queryObjectTrajectories(String objectId, Instant startTime, Instant endTime);
+    List<Trajectory> queryObjectTrajectories(String objectId, Instant startTime, Instant endTime);
 
     /**
      * 查询目标对象历史上最后一次出现的位置(坐标+时间)
