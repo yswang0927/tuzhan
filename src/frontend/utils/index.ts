@@ -621,7 +621,7 @@ export async function downloadFile(
   }
 }
 
-export interface PolygonToSvgOptions {
+export interface GeoPointsToSvgOptions {
   /** 输出尺寸，默认 64 */
   size?: number;
   /** 内边距，防止贴边，默认 4 */
@@ -638,17 +638,20 @@ export interface PolygonToSvgOptions {
   keepAspect?: boolean;
   /** 单点时的圆点半径，默认 3 */
   pointRadius?: number;
+  /** 对于多点是否绘制为折线，否则默认绘制为多边形 */
+  drawAsLine?: boolean;
 }
 
 /**
- * 把经纬度多边形/折线/点转换成固定尺寸的 SVG 字符串
+ * 把经纬度多边形/折线/点转换成固定尺寸的 SVG 字符串。
+ * 
  * @param coords [[lon, lat], [lon, lat], ...]
  * @param options 可选配置
  * @returns SVG 字符串
  */
-export function polygonToSvg(
+export function geoPointsToSvg(
   coords: Array<[number, number]> | null | undefined,
-  options: PolygonToSvgOptions = {}
+  options: GeoPointsToSvgOptions = {}
 ): string {
   const {
     size = 64,
@@ -659,6 +662,7 @@ export function polygonToSvg(
     background = 'transparent',
     keepAspect = true,
     pointRadius = 3,
+    drawAsLine = true,
   } = options;
 
   // 空数据
@@ -666,7 +670,7 @@ export function polygonToSvg(
     return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg"></svg>`;
   }
 
-  // ========== 1. 计算包围盒 ==========
+  // 计算包围盒
   let minLon = Infinity;
   let maxLon = -Infinity;
   let minLat = Infinity;
@@ -683,7 +687,7 @@ export function polygonToSvg(
   const latRange = maxLat - minLat || 1e-9;
   const drawSize = size - padding * 2;
 
-  // ========== 2. 计算缩放与偏移 ==========
+  // 计算缩放与偏移
   let scaleX: number;
   let scaleY: number;
   let offsetX = 0;
@@ -694,28 +698,27 @@ export function polygonToSvg(
     const lonFactor = Math.cos((avgLat * Math.PI) / 180);
     const geoW = lonRange * lonFactor;
     const geoH = latRange;
-    const geoRatio = geoW / geoH;
 
-    if (geoRatio > 1) {
-      // 地理更宽 → 以宽度为准，垂直居中
-      scaleX = scaleY = drawSize / geoW;
-      offsetY = (drawSize - geoH * scaleY) / 2;
-    } else {
-      // 地理更高或接近正方形 → 以高度为准，水平居中
-      scaleY = scaleX = drawSize / geoH;
-      offsetX = (drawSize - geoW * scaleX) / 2;
-    }
+    // 统一缩放比例：以较大的一边为准，保证图形完整落在画布内
+    const scale = drawSize / Math.max(geoW, geoH);
+    // lonFactor 必须折算进 scaleX，否则经度方向会被放大 1/lonFactor 而溢出画布
+    scaleX = scale * lonFactor;
+    scaleY = scale;
+
+    // 居中：把较小的一边留白平分到两侧
+    offsetX = (drawSize - geoW * scale) / 2;
+    offsetY = (drawSize - geoH * scale) / 2;
   } else {
     // 不保持比例，直接撑满画布
     scaleX = drawSize / lonRange;
     scaleY = drawSize / latRange;
   }
 
-  // ========== 3. 坐标映射（纬度需要翻转） ==========
+  // 坐标映射（纬度需要翻转）
   const toX = (lon: number): number => padding + offsetX + (lon - minLon) * scaleX;
   const toY = (lat: number): number => padding + offsetY + (maxLat - lat) * scaleY;
 
-  // ========== 4. 根据点数生成不同图形 ==========
+  // 根据点数生成不同图形
   let shape = '';
 
   if (coords.length === 1) {
@@ -742,10 +745,14 @@ export function polygonToSvg(
       .map(([lon, lat]) => `${toX(lon).toFixed(2)},${toY(lat).toFixed(2)}`)
       .join(' ');
 
-    shape = `<polygon points="${points}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linejoin="round"/>`;
+    if (drawAsLine) {
+      // 绘制为折线：连接各点但不闭合，且不填充
+      shape = `<polyline points="${points}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linejoin="round" stroke-linecap="round"/>`;
+    } else {
+      shape = `<polygon points="${points}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linejoin="round"/>`;
+    }
   }
 
-  // ========== 5. 输出 SVG ==========
   return `
 <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
   ${background !== 'transparent' ? `<rect width="${size}" height="${size}" fill="${background}"/>` : ''}

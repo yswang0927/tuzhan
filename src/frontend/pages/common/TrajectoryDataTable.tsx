@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from "react";
-import { Menu, MenuItem } from "@blueprintjs/core";
+import { Menu, MenuItem, Card } from "@blueprintjs/core";
 import {
   Cell,
   Column,
@@ -12,7 +12,7 @@ import {
 } from "@blueprintjs/table";
 
 import { useL10n } from "@/l10n";
-import { formatDate, copyToClipboard } from "@/utils";
+import { formatDate, copyToClipboard, geoPointsToSvg } from "@/utils";
 import type { TrajectoryData } from "./types";
 
 import "@blueprintjs/table/lib/css/table.css";
@@ -25,7 +25,7 @@ export interface TrajectoryDataTableProps {
 }
 
 /**
- * 使用 @blueprintjs/table 高效展示大规模时空轨迹数据
+ * 高效展示大规模时空轨迹数据
  */
 export const TrajectoryDataTable: React.FC<TrajectoryDataTableProps> = ({
   data = [],
@@ -171,25 +171,42 @@ export const TrajectoryDataTable: React.FC<TrajectoryDataTableProps> = ({
     : undefined;
 
   return (
-    <div style={{ width: "100%", height: "100%", overflow: "hidden" }}>
-      <Table
-        numRows={numRows}
-        enableRowHeader={true}
-        loadingOptions={loadingOptions}
-        selectionModes={SelectionModes.ROWS_AND_CELLS}
-        selectedRegions={selectedRegions}
-        onSelection={handleSelection}
-        selectedRegionTransform={selectedRegionTransform}
-        enableMultipleSelection={false}
-        defaultRowHeight={30}
-        enableColumnResizing={true}
-        bodyContextMenuRenderer={renderBodyContextMenu}
-      >
-        <Column name={t("账号/ID")} cellRenderer={renderObjectCell} />
-        <Column name={t("时间")} cellRenderer={renderTimeCell} />
-        <Column name={t("经度")} cellRenderer={renderLonCell} />
-        <Column name={t("纬度")} cellRenderer={renderLatCell} />
-      </Table>
+    <div className="relative w-full h-full">
+      <div className="absolute inset-0 flex">
+        <div className="relative h-full">
+          <div className="absolute inset-0 flex flex-col gap-md padding trajectory-lines" style={{overflow:'auto'}}>
+            {data.map((traj:any, indx:number) => {
+              return (
+                <Card key={traj.trajId}>
+                  <div>轨迹-{(indx+1)}</div>
+                  <div dangerouslySetInnerHTML={{__html: geoPointsToSvg(traj.points.map((p:any)=>[p.lon, p.lat]))}}></div>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="flex-1 h-full">
+          {/*<Table
+            numRows={numRows}
+            enableRowHeader={true}
+            loadingOptions={loadingOptions}
+            selectionModes={SelectionModes.ROWS_AND_CELLS}
+            selectedRegions={selectedRegions}
+            onSelection={handleSelection}
+            selectedRegionTransform={selectedRegionTransform}
+            enableMultipleSelection={false}
+            defaultRowHeight={30}
+            enableColumnResizing={true}
+            bodyContextMenuRenderer={renderBodyContextMenu}
+          >
+            <Column name={t("账号/ID")} cellRenderer={renderObjectCell} />
+            <Column name={t("时间")} cellRenderer={renderTimeCell} />
+            <Column name={t("经度")} cellRenderer={renderLonCell} />
+            <Column name={t("纬度")} cellRenderer={renderLatCell} />
+          </Table>*/}
+        </div>
+      </div>
     </div>
   );
 };

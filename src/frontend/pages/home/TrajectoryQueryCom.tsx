@@ -90,7 +90,7 @@ export const LocationQueryPanel: React.FC<PanelProps<PanelEmptyProps>> = (props)
                 mapApi.fitViewport(tableData);
             }
 
-            setTrajectoryData(tableData);
+            setTrajectoryData(trajs);
             setTableLoading(false);
         }
     }, [data, loading, setTrajectoryData, setTableLoading]);
